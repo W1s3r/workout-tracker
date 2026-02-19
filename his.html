@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="My Workout">
+<meta name="theme-color" content="#0f0f0f">
+<link rel="manifest" href="manifest-his.json">
+<title>My Workout</title>
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #242424;
+    --surface3: #2e2e2e;
+    --text: #e8e8e8;
+    --text2: #999;
+    --accent: #60a5fa;
+    --accent-dim: rgba(96,165,250,0.15);
+    --green: #4ade80;
+    --green-dim: rgba(74,222,128,0.15);
+    --radius: 12px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100dvh;
+    padding-top: var(--safe-top);
+    padding-bottom: calc(70px + var(--safe-bottom));
+    overscroll-behavior: none;
+  }
+
+  .nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--surface); border-top: 1px solid var(--surface3);
+    display: flex; padding-bottom: var(--safe-bottom); z-index: 100;
+  }
+  .nav button {
+    flex: 1; background: none; border: none; color: var(--text2);
+    padding: 12px 0 8px; font-size: 10px; display: flex; flex-direction: column;
+    align-items: center; gap: 4px; cursor: pointer; transition: color 0.2s;
+  }
+  .nav button.active { color: var(--accent); }
+  .nav button svg { width: 24px; height: 24px; }
+
+  .page { display: none; padding: 16px; max-width: 500px; margin: 0 auto; }
+  .page.active { display: block; }
+
+  .page-header { font-size: 28px; font-weight: 700; margin-bottom: 6px; padding-top: 8px; }
+  .page-sub { font-size: 14px; color: var(--text2); margin-bottom: 20px; }
+
+  .phase-badge {
+    display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    background: var(--accent-dim); color: var(--accent); margin-bottom: 16px;
+  }
+
+  .summary-cards { display: flex; gap: 8px; margin-bottom: 16px; }
+  .summary-card {
+    flex: 1; background: var(--surface); border-radius: var(--radius); padding: 14px; text-align: center;
+  }
+  .summary-number { font-size: 28px; font-weight: 700; color: var(--accent); }
+  .summary-label { font-size: 11px; color: var(--text2); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.3px; }
+
+  .workout-date { color: var(--text2); font-size: 13px; margin-bottom: 16px; }
+
+  .block-header {
+    font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--text2); margin: 20px 0 8px; padding: 0 4px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .block-header:first-child { margin-top: 0; }
+  .block-header .count { font-size: 12px; font-weight: 400; }
+
+  .exercise-card {
+    background: var(--surface); border-radius: var(--radius); margin-bottom: 6px;
+    overflow: hidden; transition: opacity 0.3s;
+  }
+  .exercise-card.done { opacity: 0.5; }
+  .exercise-card.done .exercise-name { text-decoration: line-through; }
+
+  .exercise-main {
+    display: flex; align-items: center; padding: 12px; gap: 12px; cursor: pointer;
+  }
+  .exercise-check {
+    width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--surface3);
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+  }
+  .exercise-card.done .exercise-check { border-color: var(--green); background: var(--green-dim); }
+  .exercise-check svg { width: 14px; height: 14px; opacity: 0; transition: opacity 0.2s; }
+  .exercise-card.done .exercise-check svg { opacity: 1; }
+
+  .exercise-info { flex: 1; min-width: 0; }
+  .exercise-name { font-size: 15px; font-weight: 500; }
+  .exercise-sets { font-size: 13px; color: var(--text2); margin-top: 2px; }
+
+  .exercise-expand {
+    width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+    color: var(--text2); cursor: pointer; flex-shrink: 0;
+  }
+  .exercise-expand svg { width: 16px; height: 16px; transition: transform 0.2s; }
+  .exercise-card.expanded .exercise-expand svg { transform: rotate(180deg); }
+
+  .exercise-detail { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+  .exercise-card.expanded .exercise-detail { max-height: 300px; }
+
+  .exercise-detail-inner { padding: 0 12px 12px; }
+  .exercise-note {
+    font-size: 13px; color: var(--text2); line-height: 1.4; margin-bottom: 10px;
+    padding: 8px; background: var(--surface2); border-radius: 8px;
+  }
+
+  .weight-input-row { display: flex; align-items: center; gap: 8px; }
+  .weight-input-row label { font-size: 13px; color: var(--text2); white-space: nowrap; }
+  .weight-input {
+    width: 80px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--surface3);
+    background: var(--surface2); color: var(--text); font-size: 15px; text-align: center;
+  }
+  .weight-input:focus { outline: none; border-color: var(--accent); }
+  .weight-unit { font-size: 13px; color: var(--text2); }
+
+  .finish-btn {
+    width: 100%; padding: 16px; border-radius: var(--radius); border: none;
+    background: var(--accent); color: #000;
+    font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 24px; transition: all 0.2s;
+  }
+  .finish-btn:disabled { opacity: 0.3; }
+  .finish-btn.logged { background: var(--green); }
+
+  .exercise-select {
+    width: 100%; padding: 12px; border-radius: var(--radius); border: 1px solid var(--surface3);
+    background: var(--surface); color: var(--text); font-size: 15px;
+    -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23999' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+  }
+
+  .chart-container {
+    background: var(--surface); border-radius: var(--radius); padding: 16px; margin-top: 16px;
+  }
+  .chart-container canvas { width: 100%; height: 200px; }
+
+  .pr-card {
+    background: var(--surface); border-radius: var(--radius); padding: 16px; margin-top: 12px;
+    display: flex; justify-content: space-around; text-align: center;
+  }
+  .pr-label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+  .pr-value { font-size: 24px; font-weight: 700; }
+
+  .history-list { margin-top: 16px; }
+  .history-item {
+    display: flex; justify-content: space-between; padding: 12px;
+    background: var(--surface); border-radius: var(--radius); margin-bottom: 4px;
+  }
+  .history-date { font-size: 13px; color: var(--text2); }
+  .history-weight { font-size: 15px; font-weight: 600; }
+
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--text2); }
+  .empty-state .emoji { font-size: 48px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; line-height: 1.5; }
+
+  .setting-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px; background: var(--surface); border-radius: var(--radius); margin-bottom: 6px;
+  }
+  .setting-label { font-size: 15px; }
+  .setting-value { font-size: 13px; color: var(--text2); }
+  .danger-btn {
+    width: 100%; padding: 14px; border-radius: var(--radius); border: 1px solid #f87171;
+    background: none; color: #f87171; font-size: 15px; font-weight: 500;
+    cursor: pointer; margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+
+<div class="page active" id="page-workout">
+  <div class="page-header">My Workout</div>
+  <div class="page-sub">Chest Focus, Shoulders, Back & Arms</div>
+  <div class="phase-badge" id="phase-badge">Phase 1: Pre-Surgery Push</div>
+  <div class="summary-cards" id="summary-cards"></div>
+  <div class="workout-date" id="workout-date"></div>
+  <div id="exercise-list"></div>
+  <button class="finish-btn" id="finish-btn" onclick="finishWorkout()">Finish Workout</button>
+</div>
+
+<div class="page" id="page-progress">
+  <div class="page-header">Progress</div>
+  <div class="page-sub">Track your weights over time</div>
+  <select class="exercise-select" id="exercise-select" onchange="renderProgress()"></select>
+  <div class="pr-card" id="pr-card" style="display:none">
+    <div><div class="pr-label">Personal Best</div><div class="pr-value" id="pr-best">—</div></div>
+    <div><div class="pr-label">Latest</div><div class="pr-value" id="pr-latest">—</div></div>
+    <div><div class="pr-label">Sessions</div><div class="pr-value" id="pr-sessions">—</div></div>
+  </div>
+  <div class="chart-container" id="chart-container" style="display:none">
+    <canvas id="progress-chart"></canvas>
+  </div>
+  <div class="history-list" id="history-list"></div>
+  <div class="empty-state" id="progress-empty">
+    <div class="emoji">📊</div>
+    <p>Complete a few workouts and your<br>progress will show up here.</p>
+  </div>
+</div>
+
+<div class="page" id="page-settings">
+  <div class="page-header">Settings</div>
+  <div class="setting-row">
+    <span class="setting-label">Total workouts logged</span>
+    <span class="setting-value" id="total-workouts">0</span>
+  </div>
+  <button class="danger-btn" onclick="clearAllData()">Clear All Data</button>
+</div>
+
+<nav class="nav">
+  <button class="active" onclick="showPage('workout', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
+    Workout
+  </button>
+  <button onclick="showPage('progress', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Progress
+  </button>
+  <button onclick="showPage('settings', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    Settings
+  </button>
+</nav>
+
+<script>
+const WORKOUT = {
+  blocks: [
+    {
+      name: "Warm-Up",
+      exercises: [
+        { name: "Arm Circles + Band Pull-Aparts + Push-Ups", sets: "3 min", note: "Get blood flowing to upper body.", trackWeight: false },
+        { name: "Light Bench Press", sets: "1 x 10-15", note: "Just the bar or very light. Warm up the chest.", trackWeight: false }
+      ]
+    },
+    {
+      name: "Chest (Primary Focus)",
+      exercises: [
+        { name: "Barbell Bench Press", sets: "4 x 8-10", note: "The foundation. Control down, explosive up. Go heavy with good form.", trackWeight: true },
+        { name: "Incline Dumbbell Press", sets: "3 x 10-12", note: "30-45 degree angle. Builds the upper chest shelf — biggest visual difference in a shirt.", trackWeight: true },
+        { name: "Cable Flyes", sets: "3 x 12-15", note: "Squeeze hard at the peak. Fills in inner and outer chest.", trackWeight: true },
+        { name: "Dips (Chest-Focused)", sets: "3 x 8-12", note: "Lean forward to target chest. Add weight belt if bodyweight is easy. Alt: decline DB press.", trackWeight: true }
+      ]
+    },
+    {
+      name: "Shoulders & Back",
+      exercises: [
+        { name: "Overhead Press", sets: "3 x 10", note: "Standing preferred — engages core. Builds capped shoulder look.", trackWeight: true },
+        { name: "Lateral Raises", sets: "3 x 15", note: "Light, slow, controlled. 15-20 lb dumbbells. Don't ego lift — these build width.", trackWeight: true },
+        { name: "Barbell/Dumbbell Rows", sets: "3 x 10", note: "Balance pushing with pulling. Keeps posture healthy and back thick.", trackWeight: true },
+        { name: "Face Pulls", sets: "3 x 15", note: "Rear delts + rotator cuff. Non-negotiable for shoulder health with pickleball.", trackWeight: true }
+      ]
+    },
+    {
+      name: "Arms",
+      exercises: [
+        { name: "Barbell/EZ-Bar Curls", sets: "3 x 10-12", note: "Fills out arms to match bigger chest.", trackWeight: true },
+        { name: "Tricep Overhead Extension", sets: "3 x 12", note: "Dumbbell or cable. Triceps are 2/3 of arm size.", trackWeight: true }
+      ]
+    },
+    {
+      name: "Core",
+      exercises: [
+        { name: "Cable Woodchops", sets: "3 x 12 each", note: "Rotational core strength — directly benefits pickleball.", trackWeight: true },
+        { name: "Hanging Leg Raises", sets: "3 x 10-12", note: "Best ab exercise. Bend knees if straight legs are too hard.", trackWeight: false },
+        { name: "Plank", sets: "2 x 45-60 sec", note: "Build to 60 sec. Squeeze everything tight.", trackWeight: false }
+      ]
+    }
+  ]
+};
+
+const STORE_KEY = 'workout_his';
+
+function getStore() { return JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); }
+function setStore(data) { localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
+function todayKey() { return new Date().toISOString().split('T')[0]; }
+
+function getSession() {
+  const store = getStore();
+  return store[`session_${todayKey()}`] || { checked: {}, weights: {} };
+}
+function saveSession(session) {
+  const store = getStore();
+  store[`session_${todayKey()}`] = session;
+  setStore(store);
+}
+function getHistory() { return getStore().history || []; }
+function saveHistory(history) {
+  const store = getStore();
+  store.history = history;
+  setStore(store);
+}
+
+function showPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (name === 'progress') renderProgressPage();
+  if (name === 'settings') renderSettings();
+}
+
+function renderWorkout() {
+  const session = getSession();
+  const history = getHistory();
+
+  const d = new Date();
+  document.getElementById('workout-date').textContent =
+    d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const streak = calcStreak();
+  document.getElementById('summary-cards').innerHTML = `
+    <div class="summary-card">
+      <div class="summary-number">${history.length}</div>
+      <div class="summary-label">Workouts</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-number">${streak}</div>
+      <div class="summary-label">Week Streak</div>
+    </div>
+  `;
+
+  const list = document.getElementById('exercise-list');
+  let html = '';
+  let idx = 0;
+
+  for (const block of WORKOUT.blocks) {
+    const blockStart = idx;
+    const doneCount = block.exercises.filter((_, i) => session.checked[blockStart + i]).length;
+    html += `<div class="block-header">${block.name} <span class="count">${doneCount}/${block.exercises.length}</span></div>`;
+
+    for (const ex of block.exercises) {
+      const done = session.checked[idx] || false;
+      const weight = session.weights[idx] || '';
+      html += `
+        <div class="exercise-card ${done ? 'done' : ''}" data-idx="${idx}">
+          <div class="exercise-main">
+            <div class="exercise-check" onclick="toggleCheck(${idx})">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <div class="exercise-info" onclick="toggleExpand(${idx})">
+              <div class="exercise-name">${ex.name}</div>
+              <div class="exercise-sets">${ex.sets}</div>
+            </div>
+            <div class="exercise-expand" onclick="toggleExpand(${idx})">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+          <div class="exercise-detail">
+            <div class="exercise-detail-inner">
+              <div class="exercise-note">${ex.note}</div>
+              ${ex.trackWeight ? `
+                <div class="weight-input-row">
+                  <label>Weight:</label>
+                  <input type="number" class="weight-input" value="${weight}" placeholder="0"
+                    inputmode="decimal" onchange="setWeight(${idx}, this.value)" onfocus="this.select()">
+                  <span class="weight-unit">lbs</span>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        </div>`;
+      idx++;
+    }
+  }
+  list.innerHTML = html;
+  updateFinishBtn();
+}
+
+function toggleCheck(idx) {
+  const session = getSession();
+  session.checked[idx] = !session.checked[idx];
+  saveSession(session);
+  renderWorkout();
+}
+
+function toggleExpand(idx) {
+  document.querySelector(`.exercise-card[data-idx="${idx}"]`).classList.toggle('expanded');
+}
+
+function setWeight(idx, val) {
+  const session = getSession();
+  session.weights[idx] = val;
+  saveSession(session);
+}
+
+function updateFinishBtn() {
+  const session = getSession();
+  let total = 0;
+  for (const b of WORKOUT.blocks) total += b.exercises.length;
+  const checked = Object.values(session.checked).filter(Boolean).length;
+  const btn = document.getElementById('finish-btn');
+  btn.textContent = checked === total ? 'Finish Workout' : `Finish Workout (${checked}/${total})`;
+}
+
+function finishWorkout() {
+  const session = getSession();
+  const checkedCount = Object.values(session.checked).filter(Boolean).length;
+  if (checkedCount === 0) return;
+
+  const entry = { date: todayKey(), exercises: {} };
+  let idx = 0;
+  for (const block of WORKOUT.blocks) {
+    for (const ex of block.exercises) {
+      if (session.checked[idx] && ex.trackWeight && session.weights[idx]) {
+        entry.exercises[ex.name] = parseFloat(session.weights[idx]);
+      }
+      idx++;
+    }
+  }
+
+  const history = getHistory();
+  const existingIdx = history.findIndex(h => h.date === todayKey());
+  if (existingIdx >= 0) history[existingIdx] = entry;
+  else history.push(entry);
+  saveHistory(history);
+
+  const store = getStore();
+  delete store[`session_${todayKey()}`];
+  setStore(store);
+
+  const btn = document.getElementById('finish-btn');
+  btn.textContent = 'Logged!';
+  btn.classList.add('logged');
+  btn.disabled = true;
+  setTimeout(() => { btn.classList.remove('logged'); btn.disabled = false; renderWorkout(); }, 1500);
+}
+
+function renderProgressPage() {
+  const select = document.getElementById('exercise-select');
+  const exercises = [];
+  for (const block of WORKOUT.blocks) {
+    for (const ex of block.exercises) {
+      if (ex.trackWeight) exercises.push(ex.name);
+    }
+  }
+  select.innerHTML = exercises.map(e => `<option value="${e}">${e}</option>`).join('');
+  renderProgress();
+}
+
+function renderProgress() {
+  const name = document.getElementById('exercise-select').value;
+  const history = getHistory();
+  const entries = history
+    .filter(h => h.exercises[name] !== undefined)
+    .map(h => ({ date: h.date, weight: h.exercises[name] }));
+
+  const empty = document.getElementById('progress-empty');
+  const prCard = document.getElementById('pr-card');
+  const chartContainer = document.getElementById('chart-container');
+  const historyList = document.getElementById('history-list');
+
+  if (entries.length === 0) {
+    empty.style.display = 'block';
+    prCard.style.display = 'none';
+    chartContainer.style.display = 'none';
+    historyList.innerHTML = '';
+    return;
+  }
+
+  empty.style.display = 'none';
+  prCard.style.display = 'flex';
+  chartContainer.style.display = 'block';
+
+  const best = Math.max(...entries.map(e => e.weight));
+  const latest = entries[entries.length - 1].weight;
+  document.getElementById('pr-best').textContent = best;
+  document.getElementById('pr-latest').textContent = latest;
+  document.getElementById('pr-sessions').textContent = entries.length;
+
+  drawChart(entries);
+
+  historyList.innerHTML = '<div class="block-header">History</div>' +
+    entries.slice().reverse().map(e => `
+      <div class="history-item">
+        <span class="history-date">${formatDate(e.date)}</span>
+        <span class="history-weight">${e.weight} lbs</span>
+      </div>`).join('');
+}
+
+function drawChart(entries) {
+  const canvas = document.getElementById('progress-chart');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = canvas.offsetWidth * dpr;
+  canvas.height = 200 * dpr;
+  ctx.scale(dpr, dpr);
+
+  const w = canvas.offsetWidth, h = 200;
+  const pad = { top: 20, right: 16, bottom: 30, left: 40 };
+  ctx.clearRect(0, 0, w, h);
+
+  const weights = entries.map(e => e.weight);
+  const minW = Math.min(...weights) * 0.9;
+  const maxW = Math.max(...weights) * 1.1 || 1;
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+
+  ctx.strokeStyle = '#2e2e2e'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (plotH / 4) * i;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(w - pad.right, y); ctx.stroke();
+    ctx.fillStyle = '#666'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(Math.round(maxW - (maxW - minW) * (i / 4)), pad.left - 8, y + 4);
+  }
+
+  if (entries.length === 1) {
+    ctx.fillStyle = '#60a5fa';
+    ctx.beginPath(); ctx.arc(pad.left + plotW / 2, pad.top + plotH / 2, 5, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
+
+  const points = entries.map((e, i) => ({
+    x: pad.left + (plotW / (entries.length - 1)) * i,
+    y: pad.top + plotH - ((e.weight - minW) / (maxW - minW)) * plotH
+  }));
+
+  ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  points.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+  ctx.stroke();
+
+  ctx.lineTo(points[points.length - 1].x, pad.top + plotH);
+  ctx.lineTo(points[0].x, pad.top + plotH);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(96,165,250,0.1)'; ctx.fill();
+
+  points.forEach(p => {
+    ctx.fillStyle = '#60a5fa'; ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
+  });
+
+  ctx.fillStyle = '#666'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'center';
+  const labelCount = Math.min(entries.length, 5);
+  for (let i = 0; i < labelCount; i++) {
+    const idx = Math.round((entries.length - 1) * (i / (labelCount - 1)));
+    ctx.fillText(formatDateShort(entries[idx].date), points[idx].x, h - 8);
+  }
+}
+
+function calcStreak() {
+  const history = getHistory();
+  if (history.length === 0) return 0;
+  const weeks = new Set();
+  history.forEach(h => {
+    const d = new Date(h.date + 'T00:00:00');
+    const ws = new Date(d); ws.setDate(d.getDate() - d.getDay());
+    weeks.add(ws.toISOString().split('T')[0]);
+  });
+  const sorted = [...weeks].sort().reverse();
+  let streak = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    const diff = (new Date(sorted[i-1]+'T00:00:00') - new Date(sorted[i]+'T00:00:00')) / 86400000;
+    if (diff <= 7) streak++; else break;
+  }
+  return streak;
+}
+
+function renderSettings() {
+  document.getElementById('total-workouts').textContent = getHistory().length;
+}
+
+function clearAllData() {
+  if (confirm('Clear all workout data? This cannot be undone.')) {
+    localStorage.removeItem(STORE_KEY);
+    renderWorkout();
+  }
+}
+
+function formatDate(ds) { const d = new Date(ds+'T00:00:00'); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
+function formatDateShort(ds) { const d = new Date(ds+'T00:00:00'); return `${d.getMonth()+1}/${d.getDate()}`; }
+
+renderWorkout();
+</script>
+</body>
+</html>
