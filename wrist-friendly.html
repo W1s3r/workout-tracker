@@ -99,6 +99,7 @@
   .exercise-info { flex: 1; min-width: 0; }
   .exercise-name { font-size: 15px; font-weight: 500; }
   .exercise-sets { font-size: 13px; color: var(--text2); margin-top: 2px; }
+  .exercise-target { font-size: 12px; color: #666; margin-top: 2px; font-style: italic; }
 
   .exercise-expand {
     width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
@@ -247,33 +248,33 @@ const WORKOUT = {
     {
       name: "Lower Body",
       exercises: [
-        { name: "Goblet Squat", sets: "4 x 10", note: "Light KB held at chest. Focus on grip comfort — use a towel wrap if needed. Chest up, knees out.", trackWeight: true },
-        { name: "Romanian Deadlift", sets: "3 x 10", note: "Mixed grip or straps if wrist load is uncomfortable. Hip hinge, slight knee bend, big stretch in the hamstrings.", trackWeight: true },
-        { name: "Leg Press", sets: "3 x 12", note: "No wrist load at all. Drive through the heels. Full range without locking out at the top.", trackWeight: true },
-        { name: "Walking Lunges", sets: "3 x 12 each leg", note: "Bodyweight or DBs held at sides with neutral grip. Step long, keep torso upright.", trackWeight: true }
+        { name: "Goblet Squat", sets: "4 x 10", note: "Light KB held at chest. Focus on grip comfort — use a towel wrap if needed. Chest up, knees out.", trackWeight: true, target: "35 lb KB" },
+        { name: "Romanian Deadlift", sets: "3 x 10", note: "Mixed grip or straps if wrist load is uncomfortable. Hip hinge, slight knee bend, big stretch in the hamstrings.", trackWeight: true, target: "95 lbs (mixed grip or straps)" },
+        { name: "Leg Press", sets: "3 x 12", note: "No wrist load at all. Drive through the heels. Full range without locking out at the top.", trackWeight: true, target: "180 lbs" },
+        { name: "Walking Lunges", sets: "3 x 12 each leg", note: "Bodyweight or DBs held at sides with neutral grip. Step long, keep torso upright.", trackWeight: true, target: "BW to start, 15 lb DBs if easy" }
       ]
     },
     {
       name: "Upper Body Pull",
       exercises: [
-        { name: "Lat Pulldown", sets: "4 x 10", note: "Neutral or wide grip — choose what feels best on the wrist. Pull to upper chest, elbows drive down.", trackWeight: true },
-        { name: "Seated Cable Row", sets: "3 x 12", note: "Neutral grip attachment. Squeeze shoulder blades at the end. Don't let lower back round.", trackWeight: true },
-        { name: "Face Pulls", sets: "3 x 15", note: "Rope attachment at eye height. Pull to face, elbows high. Great for rotator cuff and rear delts post-surgery.", trackWeight: true },
-        { name: "DB Hammer Curl", sets: "3 x 10", note: "Neutral grip (thumbs up) — much easier on the wrist than supinated curls. Controlled tempo.", trackWeight: true }
+        { name: "Lat Pulldown", sets: "4 x 10", note: "Neutral or wide grip — choose what feels best on the wrist. Pull to upper chest, elbows drive down.", trackWeight: true, target: "90 lbs" },
+        { name: "Seated Cable Row", sets: "3 x 12", note: "Neutral grip attachment. Squeeze shoulder blades at the end. Don't let lower back round.", trackWeight: true, target: "80 lbs" },
+        { name: "Face Pulls", sets: "3 x 15", note: "Rope attachment at eye height. Pull to face, elbows high. Great for rotator cuff and rear delts post-surgery.", trackWeight: true, target: "35 lbs" },
+        { name: "DB Hammer Curl", sets: "3 x 10", note: "Neutral grip (thumbs up) — much easier on the wrist than supinated curls. Controlled tempo.", trackWeight: true, target: "25 lbs each (neutral grip)" }
       ]
     },
     {
       name: "Upper Body Push (Wrist-Modified)",
       exercises: [
-        { name: "Incline Push-Up on Bench", sets: "3 x 10", note: "Hands on bench edge at a comfortable angle. Stop immediately before pain. Elevation reduces wrist load.", trackWeight: false },
-        { name: "DB Overhead Press", sets: "3 x 10", note: "Neutral grip, light weight. Seated or standing. Don't go heavy — this is wrist-modified. Control the descent.", trackWeight: true }
+        { name: "Incline Push-Up on Bench", sets: "3 x 10", note: "Hands on bench edge at a comfortable angle. Stop immediately before pain. Elevation reduces wrist load.", trackWeight: false, target: "Bodyweight only" },
+        { name: "DB Overhead Press", sets: "3 x 10", note: "Neutral grip, light weight. Seated or standing. Don't go heavy — this is wrist-modified. Control the descent.", trackWeight: true, target: "30 lbs each (neutral grip)" }
       ]
     },
     {
       name: "Core (No Wrist Load)",
       exercises: [
-        { name: "Dead Bug", sets: "3 x 10 each side", note: "Lie on back, arms up, knees at 90. Lower opposite arm + leg while keeping lower back pressed to floor. Slow and controlled.", trackWeight: false },
-        { name: "Ab Wheel or Hanging Knee Raises", sets: "3 x 12", note: "Ab wheel if wrist is okay with it; otherwise hanging knee raises from a pull-up bar. Both are excellent.", trackWeight: false }
+        { name: "Dead Bug", sets: "3 x 10 each side", note: "Lie on back, arms up, knees at 90. Lower opposite arm + leg while keeping lower back pressed to floor. Slow and controlled.", trackWeight: false, target: "Bodyweight" },
+        { name: "Ab Wheel or Hanging Knee Raises", sets: "3 x 12", note: "Ab wheel if wrist is okay with it; otherwise hanging knee raises from a pull-up bar. Both are excellent.", trackWeight: false, target: "Bodyweight" }
       ]
     }
   ]
@@ -351,6 +352,7 @@ function renderWorkout() {
             <div class="exercise-info" onclick="toggleExpand(${idx})">
               <div class="exercise-name">${ex.name}</div>
               <div class="exercise-sets">${ex.sets}</div>
+              ${ex.target ? `<div class="exercise-target">Target: ${ex.target}</div>` : ''}
             </div>
             <div class="exercise-expand" onclick="toggleExpand(${idx})">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
@@ -362,7 +364,7 @@ function renderWorkout() {
               ${ex.trackWeight ? `
                 <div class="weight-input-row">
                   <label>Weight:</label>
-                  <input type="number" class="weight-input" value="${weight}" placeholder="0"
+                  <input type="number" class="weight-input" value="${weight}" placeholder="${ex.target ? ex.target.replace(/[^0-9.]/g, '') || '0' : '0'}"
                     inputmode="decimal" onchange="setWeight(${idx}, this.value)" onfocus="this.select()">
                   <span class="weight-unit">lbs</span>
                 </div>
