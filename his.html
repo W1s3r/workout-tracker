@@ -58,8 +58,18 @@
 
   .phase-badge {
     display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
-    background: var(--accent-dim); color: var(--accent); margin-bottom: 16px;
+    background: var(--accent-dim); color: var(--accent); margin-bottom: 12px;
   }
+
+  /* Session progress bar */
+  .session-progress {
+    background: var(--surface); border-radius: var(--radius); padding: 12px 14px;
+    margin-bottom: 14px; display: flex; align-items: center; gap: 12px;
+  }
+  .session-progress-text { font-size: 13px; color: var(--text2); white-space: nowrap; }
+  .session-progress-text strong { color: var(--text); }
+  .progress-bar-wrap { flex: 1; background: var(--surface3); border-radius: 4px; height: 6px; }
+  .progress-bar-fill { height: 6px; border-radius: 4px; background: var(--accent); transition: width 0.4s ease; }
 
   .summary-cards { display: flex; gap: 8px; margin-bottom: 16px; }
   .summary-card {
@@ -79,26 +89,19 @@
   .block-header .count { font-size: 12px; font-weight: 400; }
 
   .exercise-card {
-    background: var(--surface); border-radius: var(--radius); margin-bottom: 6px;
+    background: var(--surface); border-radius: var(--radius); margin-bottom: 8px;
     overflow: hidden; transition: opacity 0.3s;
   }
-  .exercise-card.done { opacity: 0.5; }
-  .exercise-card.done .exercise-name { text-decoration: line-through; }
+  .exercise-card.all-done { opacity: 0.55; }
+  .exercise-card.all-done .exercise-name { text-decoration: line-through; }
 
   .exercise-main {
     display: flex; align-items: center; padding: 12px; gap: 12px; cursor: pointer;
   }
-  .exercise-check {
-    width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--surface3);
-    flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.2s;
-  }
-  .exercise-card.done .exercise-check { border-color: var(--green); background: var(--green-dim); }
-  .exercise-check svg { width: 14px; height: 14px; opacity: 0; transition: opacity 0.2s; }
-  .exercise-card.done .exercise-check svg { opacity: 1; }
-
   .exercise-info { flex: 1; min-width: 0; }
   .exercise-name { font-size: 15px; font-weight: 500; }
-  .exercise-sets { font-size: 13px; color: var(--text2); margin-top: 2px; }
+  .exercise-meta { font-size: 13px; color: var(--text2); margin-top: 2px; }
+  .exercise-target { font-size: 12px; color: #666; margin-top: 2px; font-style: italic; }
 
   .exercise-expand {
     width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
@@ -107,23 +110,50 @@
   .exercise-expand svg { width: 16px; height: 16px; transition: transform 0.2s; }
   .exercise-card.expanded .exercise-expand svg { transform: rotate(180deg); }
 
-  .exercise-detail { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
-  .exercise-card.expanded .exercise-detail { max-height: 300px; }
-
+  .exercise-detail { max-height: 0; overflow: hidden; transition: max-height 0.4s ease; }
+  .exercise-card.expanded .exercise-detail { max-height: 600px; }
   .exercise-detail-inner { padding: 0 12px 12px; }
   .exercise-note {
-    font-size: 13px; color: var(--text2); line-height: 1.4; margin-bottom: 10px;
+    font-size: 13px; color: var(--text2); line-height: 1.4; margin-bottom: 12px;
     padding: 8px; background: var(--surface2); border-radius: 8px;
   }
 
-  .weight-input-row { display: flex; align-items: center; gap: 8px; }
-  .weight-input-row label { font-size: 13px; color: var(--text2); white-space: nowrap; }
-  .weight-input {
-    width: 80px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--surface3);
-    background: var(--surface2); color: var(--text); font-size: 15px; text-align: center;
+  /* Per-set rows */
+  .set-rows { display: flex; flex-direction: column; gap: 6px; }
+  .set-row {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface2); border-radius: 8px; padding: 8px 10px;
+    transition: background 0.2s, opacity 0.3s;
   }
-  .weight-input:focus { outline: none; border-color: var(--accent); }
-  .weight-unit { font-size: 13px; color: var(--text2); }
+  .set-row.set-done { background: rgba(74,222,128,0.08); opacity: 0.7; }
+  .set-label { font-size: 12px; color: var(--text2); min-width: 38px; }
+  .set-input {
+    width: 62px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--surface3);
+    background: var(--bg); color: var(--text); font-size: 14px; text-align: center;
+  }
+  .set-input:focus { outline: none; border-color: var(--accent); }
+  .set-input.set-done-input { border-color: rgba(74,222,128,0.3); color: var(--text2); }
+  .set-input-label { font-size: 11px; color: #666; min-width: 20px; }
+  .set-done-btn {
+    margin-left: auto; padding: 6px 12px; border-radius: 6px; border: none;
+    background: var(--surface3); color: var(--text2); font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+  }
+  .set-done-btn:active { transform: scale(0.95); }
+  .set-done-btn.completed {
+    background: var(--green-dim); color: var(--green); pointer-events: none;
+  }
+  .set-done-btn.completed::before { content: '✓ '; }
+
+  /* Non-weighted exercise simple check */
+  .simple-check-btn {
+    width: 100%; padding: 10px; border-radius: 8px; border: none;
+    background: var(--surface3); color: var(--text2); font-size: 14px;
+    cursor: pointer; transition: all 0.15s; margin-top: 4px;
+  }
+  .simple-check-btn.checked {
+    background: var(--green-dim); color: var(--green);
+  }
 
   .finish-btn {
     width: 100%; padding: 16px; border-radius: var(--radius); border: none;
@@ -133,6 +163,25 @@
   .finish-btn:disabled { opacity: 0.3; }
   .finish-btn.logged { background: var(--green); }
 
+  /* Rest Timer Overlay */
+  #rest-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,0.93);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 0.25s;
+  }
+  #rest-overlay.visible { opacity: 1; pointer-events: all; }
+  .rest-label { font-size: 14px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .rest-ex-name { font-size: 20px; font-weight: 600; margin-bottom: 32px; color: var(--text); text-align: center; padding: 0 24px; }
+  .rest-countdown {
+    font-size: 96px; font-weight: 700; font-variant-numeric: tabular-nums;
+    color: var(--accent); line-height: 1; margin-bottom: 24px;
+    transition: color 0.3s;
+  }
+  .rest-countdown.ending { color: #f87171; }
+  .rest-subtext { font-size: 13px; color: var(--text2); }
+
+  /* Progress page */
   .exercise-select {
     width: 100%; padding: 12px; border-radius: var(--radius); border: 1px solid var(--surface3);
     background: var(--surface); color: var(--text); font-size: 15px;
@@ -140,19 +189,14 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23999' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
     background-repeat: no-repeat; background-position: right 12px center;
   }
-
-  .chart-container {
-    background: var(--surface); border-radius: var(--radius); padding: 16px; margin-top: 16px;
-  }
+  .chart-container { background: var(--surface); border-radius: var(--radius); padding: 16px; margin-top: 16px; }
   .chart-container canvas { width: 100%; height: 200px; }
-
   .pr-card {
     background: var(--surface); border-radius: var(--radius); padding: 16px; margin-top: 12px;
     display: flex; justify-content: space-around; text-align: center;
   }
   .pr-label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
   .pr-value { font-size: 24px; font-weight: 700; }
-
   .history-list { margin-top: 16px; }
   .history-item {
     display: flex; justify-content: space-between; padding: 12px;
@@ -160,11 +204,11 @@
   }
   .history-date { font-size: 13px; color: var(--text2); }
   .history-weight { font-size: 15px; font-weight: 600; }
-
   .empty-state { text-align: center; padding: 40px 20px; color: var(--text2); }
   .empty-state .emoji { font-size: 48px; margin-bottom: 12px; }
   .empty-state p { font-size: 14px; line-height: 1.5; }
 
+  /* Settings */
   .setting-row {
     display: flex; justify-content: space-between; align-items: center;
     padding: 14px; background: var(--surface); border-radius: var(--radius); margin-bottom: 6px;
@@ -180,10 +224,22 @@
 </head>
 <body>
 
+<!-- Rest Timer Overlay -->
+<div id="rest-overlay" onclick="dismissTimer()">
+  <div class="rest-label">Rest</div>
+  <div class="rest-ex-name" id="rest-ex-name"></div>
+  <div class="rest-countdown" id="rest-countdown">0:00</div>
+  <div class="rest-subtext">Tap anywhere to dismiss</div>
+</div>
+
 <div class="page active" id="page-workout">
   <div class="page-header">My Workout</div>
-  <div class="page-sub">Chest Focus, Shoulders, Back & Arms</div>
+  <div class="page-sub">Chest Focus, Shoulders, Back &amp; Arms</div>
   <div class="phase-badge" id="phase-badge">Return to Training — Week 1 (Wrist Recovery)</div>
+  <div class="session-progress" id="session-progress">
+    <div class="session-progress-text"><strong id="sp-done">0</strong> / <strong id="sp-total">0</strong> sets done</div>
+    <div class="progress-bar-wrap"><div class="progress-bar-fill" id="sp-bar" style="width:0%"></div></div>
+  </div>
   <div class="summary-cards" id="summary-cards"></div>
   <div class="workout-date" id="workout-date"></div>
   <div id="exercise-list"></div>
@@ -234,51 +290,64 @@
 </nav>
 
 <script>
+// ─── Workout Data ────────────────────────────────────────────────────────────
 const WORKOUT = {
   blocks: [
     {
       name: "Warm-Up",
       exercises: [
-        { name: "Arm Circles + Band Pull-Aparts + Push-Ups", sets: "5 min", note: "Spend extra time on wrist circles and shoulder warm-up. Ease into wrist extension — don't force range of motion.", trackWeight: false },
-        { name: "Light Bench Press (bar only)", sets: "2 x 15", note: "Just the bar — 45 lbs. Feel out the wrist under load before adding plates.", trackWeight: false }
+        { name: "Arm Circles + Band Pull-Aparts + Push-Ups", sets: "5 min", note: "Spend extra time on wrist circles and shoulder warm-up. Ease into wrist extension — don't force range of motion.", trackWeight: false, simple: true, rest: 60 },
+        { name: "Light Bench Press (bar only)", sets: "2 x 15", note: "Just the bar — 45 lbs. Feel out the wrist under load before adding plates.", trackWeight: false, simple: true, rest: 60 }
       ]
     },
     {
       name: "Chest (Primary Focus)",
       exercises: [
-        { name: "Barbell Bench Press", sets: "3 x 12", note: "✅ Session 1: 95 lbs felt good. 135 caused lightheadedness — stick at 95 until fully stable, then bump to 115. Control down, explosive up.", trackWeight: true },
-        { name: "Incline Dumbbell Press", sets: "3 x 12", note: "✅ Session 1: 25 lbs too easy. Next session: try 35 lbs. DBs give wrist freedom — 30-45 degree angle, squeeze at top.", trackWeight: true },
-        { name: "Cable Flyes", sets: "3 x 15", note: "✅ Session 1: 15 lbs felt perfect — good chest engagement. Keep here until all 3 sets are easy, then bump to 20.", trackWeight: true },
-        { name: "Dips (Band-Assisted)", sets: "3 x 8", note: "✅ Session 1: 8 reps with heaviest resistance band under feet. Lean torso forward for chest focus. Drop band assist when you can hit 10+ bodyweight.", trackWeight: false }
+        { name: "Barbell Bench Press", sets: "3 x 12", note: "✅ Session 1: 95 lbs felt good. 135 caused lightheadedness — stick at 95 until fully stable, then bump to 115. Control down, explosive up.", trackWeight: true, rest: 120 },
+        { name: "Incline Dumbbell Press", sets: "3 x 12", note: "✅ Session 1: 25 lbs too easy. Next session: try 35 lbs. DBs give wrist freedom — 30-45 degree angle, squeeze at top.", trackWeight: true, rest: 90 },
+        { name: "Cable Flyes", sets: "3 x 15", note: "✅ Session 1: 15 lbs felt perfect — good chest engagement. Keep here until all 3 sets are easy, then bump to 20.", trackWeight: true, rest: 90 },
+        { name: "Dips (Band-Assisted)", sets: "3 x 8", note: "✅ Session 1: 8 reps with heaviest resistance band under feet. Lean torso forward for chest focus. Drop band assist when you can hit 10+ bodyweight.", trackWeight: false, rest: 90 }
       ]
     },
     {
       name: "Shoulders & Back",
       exercises: [
-        { name: "Dumbbell Overhead Press", sets: "3 x 12", note: "✅ Session 1: Started 30 lbs, dropped to 20 lbs by set 2. Shoulders fatigue fast after chest. Start at 20 lbs, build back to 30 over 2-3 weeks.", trackWeight: true },
-        { name: "Lateral Raises", sets: "3 x 15", note: "✅ Session 1: 10-12 lbs felt good. Light, slow, controlled. These build width. Don't ego lift — good form > heavy weight.", trackWeight: true },
-        { name: "Dumbbell Rows", sets: "3 x 12", note: "✅ Session 1: 40 lbs felt good. Single-arm, neutral grip. Brace on bench. Increase to 45-50 when all reps feel easy.", trackWeight: true },
-        { name: "Face Pulls (Single Cable + Rope)", sets: "3 x 15", note: "✅ Session 1: 40 lbs on single cable with rope. Overhand grip, pull to forehead height, elbows flared out, externally rotate at end (thumbs point back). Rear delts + rotator cuff.", trackWeight: true }
+        { name: "Dumbbell Overhead Press", sets: "3 x 12", note: "✅ Session 1: Started 30 lbs, dropped to 20 lbs by set 2. Shoulders fatigue fast after chest. Start at 20 lbs, build back to 30 over 2-3 weeks.", trackWeight: true, rest: 90 },
+        { name: "Lateral Raises", sets: "3 x 15", note: "✅ Session 1: 10-12 lbs felt good. Light, slow, controlled. These build width. Don't ego lift — good form > heavy weight.", trackWeight: true, rest: 60 },
+        { name: "Dumbbell Rows", sets: "3 x 12", note: "✅ Session 1: 40 lbs felt good. Single-arm, neutral grip. Brace on bench. Increase to 45-50 when all reps feel easy.", trackWeight: true, rest: 90 },
+        { name: "Face Pulls (Single Cable + Rope)", sets: "3 x 15", note: "✅ Session 1: 40 lbs on single cable with rope. Overhand grip, pull to forehead height, elbows flared out, externally rotate at end (thumbs point back). Rear delts + rotator cuff.", trackWeight: true, rest: 60 }
       ]
     },
     {
       name: "Arms",
       exercises: [
-        { name: "EZ-Bar Curls", sets: "3 x 12", note: "✅ Session 1: 40 lbs felt almost too easy. Next session: bump to 50 lbs. EZ bar easier on wrist than straight bar. Control the negative.", trackWeight: true },
-        { name: "Tricep Pushdown (Cable, Single Side)", sets: "3 x 15", note: "✅ Session 1: 50 lbs single-side felt good. Cable pushdown, overhand grip. Work up to overhead extension when wrist ROM is fully back.", trackWeight: true }
+        { name: "EZ-Bar Curls", sets: "3 x 12", note: "✅ Session 1: 40 lbs felt almost too easy. Next session: bump to 50 lbs. EZ bar easier on wrist than straight bar. Control the negative.", trackWeight: true, rest: 90 },
+        { name: "Tricep Pushdown (Cable, Single Side)", sets: "3 x 15", note: "✅ Session 1: 50 lbs single-side felt good. Cable pushdown, overhand grip. Work up to overhead extension when wrist ROM is fully back.", trackWeight: true, rest: 90 }
       ]
     },
     {
       name: "Core",
       exercises: [
-        { name: "Cable Woodchops", sets: "3 x 12 each", note: "✅ Session 1: 50 lbs felt good. Rotational core — directly benefits any sport/activity. Light grip, smooth rotation.", trackWeight: true },
-        { name: "Hanging Leg Raises (Band-Assisted)", sets: "3 x 10", note: "✅ Session 1: Used resistance band under butt — grip/forearm limitation, not core. Grip strength will recover in a few weeks. Ditch the band when you can hang for all 3 sets.", trackWeight: false },
-        { name: "Plank", sets: "2 x 60 sec", note: "✅ Session 1: Hit 60 sec without much difficulty. Next session: try 75 sec. Squeeze everything tight.", trackWeight: false }
+        { name: "Cable Woodchops", sets: "3 x 12 each", note: "✅ Session 1: 50 lbs felt good. Rotational core — directly benefits any sport/activity. Light grip, smooth rotation.", trackWeight: true, rest: 60 },
+        { name: "Hanging Leg Raises (Band-Assisted)", sets: "3 x 10", note: "✅ Session 1: Used resistance band under butt — grip/forearm limitation, not core. Grip strength will recover in a few weeks. Ditch the band when you can hang for all 3 sets.", trackWeight: false, rest: 60 },
+        { name: "Plank", sets: "2 x 60 sec", note: "✅ Session 1: Hit 60 sec without much difficulty. Next session: try 75 sec. Squeeze everything tight.", trackWeight: false, rest: 60 }
       ]
     }
   ]
 };
 
+// Parse "3 x 12" → 3, "5 min" → 0 (simple), etc.
+function parseSetsCount(setsStr) {
+  const m = setsStr.match(/^(\d+)\s*x/i);
+  return m ? parseInt(m[1]) : 0;
+}
+
+// Build a stable id from exercise name
+function exId(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+// ─── Storage ─────────────────────────────────────────────────────────────────
 const STORE_KEY = 'workout_his';
 
 function getStore() { return JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); }
@@ -287,7 +356,7 @@ function todayKey() { return new Date().toISOString().split('T')[0]; }
 
 function getSession() {
   const store = getStore();
-  return store[`session_${todayKey()}`] || { checked: {}, weights: {} };
+  return store[`session_${todayKey()}`] || { setLog: {}, simpleChecked: {} };
 }
 function saveSession(session) {
   const store = getStore();
@@ -301,23 +370,101 @@ function saveHistory(history) {
   setStore(store);
 }
 
-function showPage(name, btn) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById(`page-${name}`).classList.add('active');
-  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  if (name === 'progress') renderProgressPage();
-  if (name === 'settings') renderSettings();
+// ─── Session progress helpers ─────────────────────────────────────────────────
+function countTotalSets() {
+  let total = 0;
+  for (const block of WORKOUT.blocks) {
+    for (const ex of block.exercises) {
+      if (ex.simple) total += 1;
+      else total += parseSetsCount(ex.sets);
+    }
+  }
+  return total;
 }
 
+function countDoneSets(session) {
+  let done = 0;
+  for (const id in session.setLog) {
+    for (const sIdx in session.setLog[id]) {
+      if (session.setLog[id][sIdx]?.done) done++;
+    }
+  }
+  for (const id in session.simpleChecked) {
+    if (session.simpleChecked[id]) done++;
+  }
+  return done;
+}
+
+function isExAllDone(ex, session) {
+  const id = exId(ex.name);
+  if (ex.simple) return !!session.simpleChecked[id];
+  const sc = parseSetsCount(ex.sets);
+  if (!sc) return false;
+  for (let i = 0; i < sc; i++) {
+    if (!session.setLog[id]?.[i]?.done) return false;
+  }
+  return true;
+}
+
+// ─── Rest Timer ───────────────────────────────────────────────────────────────
+let timerInterval = null;
+let timerRemaining = 0;
+
+function startTimer(seconds, exName) {
+  clearInterval(timerInterval);
+  timerRemaining = seconds;
+
+  const overlay = document.getElementById('rest-overlay');
+  document.getElementById('rest-ex-name').textContent = exName;
+  overlay.classList.add('visible');
+  updateTimerDisplay();
+
+  timerInterval = setInterval(() => {
+    timerRemaining--;
+    updateTimerDisplay();
+    if (timerRemaining <= 0) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      setTimeout(dismissTimer, 800);
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  const mins = Math.floor(timerRemaining / 60);
+  const secs = timerRemaining % 60;
+  const display = `${mins}:${secs.toString().padStart(2, '0')}`;
+  const el = document.getElementById('rest-countdown');
+  el.textContent = display;
+  el.classList.toggle('ending', timerRemaining <= 10 && timerRemaining > 0);
+}
+
+function dismissTimer() {
+  clearInterval(timerInterval);
+  timerInterval = null;
+  document.getElementById('rest-overlay').classList.remove('visible');
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
 function renderWorkout() {
   const session = getSession();
   const history = getHistory();
+  const totalSets = countTotalSets();
+  const doneSets = countDoneSets(session);
 
+  // Date
   const d = new Date();
   document.getElementById('workout-date').textContent =
     d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
+  // Session progress
+  document.getElementById('sp-done').textContent = doneSets;
+  document.getElementById('sp-total').textContent = totalSets;
+  const pct = totalSets > 0 ? Math.round((doneSets / totalSets) * 100) : 0;
+  document.getElementById('sp-bar').style.width = pct + '%';
+
+  // Summary cards
   const streak = calcStreak();
   document.getElementById('summary-cards').innerHTML = `
     <div class="summary-card">
@@ -330,92 +477,206 @@ function renderWorkout() {
     </div>
   `;
 
+  // Exercise list
   const list = document.getElementById('exercise-list');
   let html = '';
-  let idx = 0;
 
   for (const block of WORKOUT.blocks) {
-    const blockStart = idx;
-    const doneCount = block.exercises.filter((_, i) => session.checked[blockStart + i]).length;
-    html += `<div class="block-header">${block.name} <span class="count">${doneCount}/${block.exercises.length}</span></div>`;
+    const doneInBlock = block.exercises.filter(ex => isExAllDone(ex, session)).length;
+    html += `<div class="block-header">${block.name} <span class="count">${doneInBlock}/${block.exercises.length}</span></div>`;
 
     for (const ex of block.exercises) {
-      const done = session.checked[idx] || false;
-      const weight = session.weights[idx] || '';
+      const id = exId(ex.name);
+      const allDone = isExAllDone(ex, session);
+      html += `<div class="exercise-card ${allDone ? 'all-done' : ''}" data-id="${id}">`;
+
+      // Header row
       html += `
-        <div class="exercise-card ${done ? 'done' : ''}" data-idx="${idx}">
-          <div class="exercise-main">
-            <div class="exercise-check" onclick="toggleCheck(${idx})">
-              <svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            </div>
-            <div class="exercise-info" onclick="toggleExpand(${idx})">
-              <div class="exercise-name">${ex.name}</div>
-              <div class="exercise-sets">${ex.sets}</div>
-            </div>
-            <div class="exercise-expand" onclick="toggleExpand(${idx})">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
-            </div>
+        <div class="exercise-main" onclick="toggleExpand('${id}')">
+          <div class="exercise-info">
+            <div class="exercise-name">${ex.name}</div>
+            <div class="exercise-meta">${formatSetsMeta(ex, session)}</div>
           </div>
-          <div class="exercise-detail">
-            <div class="exercise-detail-inner">
-              <div class="exercise-note">${ex.note}</div>
-              ${ex.trackWeight ? `
-                <div class="weight-input-row">
-                  <label>Weight:</label>
-                  <input type="number" class="weight-input" value="${weight}" placeholder="0"
-                    inputmode="decimal" onchange="setWeight(${idx}, this.value)" onfocus="this.select()">
-                  <span class="weight-unit">lbs</span>
-                </div>
-              ` : ''}
-            </div>
+          <div class="exercise-expand">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
           </div>
         </div>`;
-      idx++;
+
+      // Expandable detail
+      html += `<div class="exercise-detail"><div class="exercise-detail-inner">`;
+      html += `<div class="exercise-note">${ex.note}</div>`;
+
+      if (ex.simple) {
+        const checked = !!session.simpleChecked[id];
+        html += `<button class="simple-check-btn ${checked ? 'checked' : ''}"
+          onclick="toggleSimple('${id}')">${checked ? '✓ Done' : 'Mark Done'}</button>`;
+      } else {
+        const sc = parseSetsCount(ex.sets);
+        html += `<div class="set-rows">`;
+        for (let i = 0; i < sc; i++) {
+          const setData = session.setLog[id]?.[i] || {};
+          const isDone = !!setData.done;
+          const wVal = setData.weight !== undefined ? setData.weight : '';
+          const rVal = setData.reps !== undefined ? setData.reps : '';
+
+          html += `<div class="set-row ${isDone ? 'set-done' : ''}" data-exid="${id}" data-set="${i}">
+            <span class="set-label">Set ${i + 1}</span>`;
+
+          if (ex.trackWeight) {
+            html += `<input type="number" class="set-input ${isDone ? 'set-done-input' : ''}"
+              value="${wVal}" placeholder="wt"
+              inputmode="decimal" ${isDone ? 'disabled' : ''}
+              onchange="setWeight('${id}', ${i}, this.value)"
+              onfocus="this.select()">
+            <span class="set-input-label">lbs</span>`;
+          }
+
+          html += `<input type="number" class="set-input ${isDone ? 'set-done-input' : ''}"
+            value="${rVal}" placeholder="reps"
+            inputmode="numeric" ${isDone ? 'disabled' : ''}
+            onchange="setReps('${id}', ${i}, this.value)"
+            onfocus="this.select()" style="width:52px">
+          <span class="set-input-label">reps</span>`;
+
+          html += `<button class="set-done-btn ${isDone ? 'completed' : ''}"
+            onclick="${isDone ? '' : `markSetDone('${id}', ${i})`}">
+            ${isDone ? 'Done' : 'Done ✓'}
+          </button>`;
+
+          html += `</div>`;
+        }
+        html += `</div>`; // .set-rows
+      }
+
+      html += `</div></div>`; // detail-inner, exercise-detail
+      html += `</div>`; // exercise-card
     }
   }
+
   list.innerHTML = html;
-  updateFinishBtn();
+  updateFinishBtn(doneSets, totalSets);
 }
 
-function toggleCheck(idx) {
+function formatSetsMeta(ex, session) {
+  const id = exId(ex.name);
+  if (ex.simple) {
+    return session.simpleChecked[id] ? '✓ done' : ex.sets;
+  }
+  const sc = parseSetsCount(ex.sets);
+  if (!sc) return ex.sets;
+  let done = 0;
+  for (let i = 0; i < sc; i++) {
+    if (session.setLog[id]?.[i]?.done) done++;
+  }
+  return `${done} / ${sc} sets · ${ex.sets.replace(/^\d+\s*x\s*/i, '')} reps`;
+}
+
+function toggleExpand(id) {
+  document.querySelector(`.exercise-card[data-id="${id}"]`).classList.toggle('expanded');
+}
+
+// ─── Set Actions ──────────────────────────────────────────────────────────────
+function setWeight(id, setIdx, val) {
   const session = getSession();
-  session.checked[idx] = !session.checked[idx];
+  if (!session.setLog[id]) session.setLog[id] = {};
+  if (!session.setLog[id][setIdx]) session.setLog[id][setIdx] = {};
+  session.setLog[id][setIdx].weight = parseFloat(val) || val;
   saveSession(session);
+}
+
+function setReps(id, setIdx, val) {
+  const session = getSession();
+  if (!session.setLog[id]) session.setLog[id] = {};
+  if (!session.setLog[id][setIdx]) session.setLog[id][setIdx] = {};
+  session.setLog[id][setIdx].reps = parseInt(val) || val;
+  saveSession(session);
+}
+
+function markSetDone(id, setIdx) {
+  const session = getSession();
+  if (!session.setLog[id]) session.setLog[id] = {};
+  if (!session.setLog[id][setIdx]) session.setLog[id][setIdx] = {};
+
+  // Capture current input values
+  const card = document.querySelector(`.exercise-card[data-id="${id}"]`);
+  const row = card?.querySelector(`.set-row[data-set="${setIdx}"]`);
+  if (row) {
+    const inputs = row.querySelectorAll('.set-input');
+    const ex = findEx(id);
+    if (ex?.trackWeight && inputs.length >= 2) {
+      const wv = parseFloat(inputs[0].value);
+      const rv = parseInt(inputs[1].value);
+      if (!isNaN(wv)) session.setLog[id][setIdx].weight = wv;
+      if (!isNaN(rv)) session.setLog[id][setIdx].reps = rv;
+    } else if (inputs.length >= 1) {
+      const rv = parseInt(inputs[0].value);
+      if (!isNaN(rv)) session.setLog[id][setIdx].reps = rv;
+    }
+  }
+
+  session.setLog[id][setIdx].done = true;
+  saveSession(session);
+
+  if (navigator.vibrate) navigator.vibrate(50);
+
+  const ex = findEx(id);
+  if (ex) startTimer(ex.rest || 90, ex.name);
+
   renderWorkout();
+  const newCard = document.querySelector(`.exercise-card[data-id="${id}"]`);
+  if (newCard) newCard.classList.add('expanded');
 }
 
-function toggleExpand(idx) {
-  document.querySelector(`.exercise-card[data-idx="${idx}"]`).classList.toggle('expanded');
-}
-
-function setWeight(idx, val) {
+function toggleSimple(id) {
   const session = getSession();
-  session.weights[idx] = val;
+  session.simpleChecked[id] = !session.simpleChecked[id];
   saveSession(session);
+
+  if (session.simpleChecked[id]) {
+    if (navigator.vibrate) navigator.vibrate(50);
+    const ex = findEx(id);
+    if (ex) startTimer(ex.rest || 60, ex.name);
+  }
+
+  renderWorkout();
+  const newCard = document.querySelector(`.exercise-card[data-id="${id}"]`);
+  if (newCard) newCard.classList.add('expanded');
 }
 
-function updateFinishBtn() {
-  const session = getSession();
-  let total = 0;
-  for (const b of WORKOUT.blocks) total += b.exercises.length;
-  const checked = Object.values(session.checked).filter(Boolean).length;
+function findEx(id) {
+  for (const block of WORKOUT.blocks) {
+    for (const ex of block.exercises) {
+      if (exId(ex.name) === id) return ex;
+    }
+  }
+  return null;
+}
+
+// ─── Finish Workout ───────────────────────────────────────────────────────────
+function updateFinishBtn(doneSets, totalSets) {
   const btn = document.getElementById('finish-btn');
-  btn.textContent = checked === total ? 'Finish Workout' : `Finish Workout (${checked}/${total})`;
+  btn.textContent = doneSets === totalSets && totalSets > 0
+    ? 'Finish Workout'
+    : `Finish Workout (${doneSets}/${totalSets} sets)`;
 }
 
 function finishWorkout() {
   const session = getSession();
-  const checkedCount = Object.values(session.checked).filter(Boolean).length;
-  if (checkedCount === 0) return;
+  const doneSets = countDoneSets(session);
+  if (doneSets === 0) return;
 
   const entry = { date: todayKey(), exercises: {} };
-  let idx = 0;
   for (const block of WORKOUT.blocks) {
     for (const ex of block.exercises) {
-      if (session.checked[idx] && ex.trackWeight && session.weights[idx]) {
-        entry.exercises[ex.name] = parseFloat(session.weights[idx]);
+      if (!ex.trackWeight) continue;
+      const id = exId(ex.name);
+      const sets = session.setLog[id] || {};
+      const weights = Object.values(sets)
+        .filter(s => s.done && s.weight)
+        .map(s => parseFloat(s.weight));
+      if (weights.length > 0) {
+        entry.exercises[ex.name] = Math.max(...weights);
       }
-      idx++;
     }
   }
 
@@ -430,12 +691,24 @@ function finishWorkout() {
   setStore(store);
 
   const btn = document.getElementById('finish-btn');
-  btn.textContent = 'Logged!';
+  btn.textContent = 'Logged! 💪';
   btn.classList.add('logged');
   btn.disabled = true;
-  setTimeout(() => { btn.classList.remove('logged'); btn.disabled = false; renderWorkout(); }, 1500);
+  if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
+  setTimeout(() => { btn.classList.remove('logged'); btn.disabled = false; renderWorkout(); }, 1800);
 }
 
+// ─── Page Nav ─────────────────────────────────────────────────────────────────
+function showPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (name === 'progress') renderProgressPage();
+  if (name === 'settings') renderSettings();
+}
+
+// ─── Progress Page ────────────────────────────────────────────────────────────
 function renderProgressPage() {
   const select = document.getElementById('exercise-select');
   const exercises = [];
@@ -461,17 +734,12 @@ function renderProgress() {
   const historyList = document.getElementById('history-list');
 
   if (entries.length === 0) {
-    empty.style.display = 'block';
-    prCard.style.display = 'none';
-    chartContainer.style.display = 'none';
-    historyList.innerHTML = '';
+    empty.style.display = 'block'; prCard.style.display = 'none';
+    chartContainer.style.display = 'none'; historyList.innerHTML = '';
     return;
   }
 
-  empty.style.display = 'none';
-  prCard.style.display = 'flex';
-  chartContainer.style.display = 'block';
-
+  empty.style.display = 'none'; prCard.style.display = 'flex'; chartContainer.style.display = 'block';
   const best = Math.max(...entries.map(e => e.weight));
   const latest = entries[entries.length - 1].weight;
   document.getElementById('pr-best').textContent = best;
@@ -479,7 +747,6 @@ function renderProgress() {
   document.getElementById('pr-sessions').textContent = entries.length;
 
   drawChart(entries);
-
   historyList.innerHTML = '<div class="block-header">History</div>' +
     entries.slice().reverse().map(e => `
       <div class="history-item">
@@ -495,17 +762,14 @@ function drawChart(entries) {
   canvas.width = canvas.offsetWidth * dpr;
   canvas.height = 200 * dpr;
   ctx.scale(dpr, dpr);
-
   const w = canvas.offsetWidth, h = 200;
   const pad = { top: 20, right: 16, bottom: 30, left: 40 };
   ctx.clearRect(0, 0, w, h);
-
   const weights = entries.map(e => e.weight);
   const minW = Math.min(...weights) * 0.9;
   const maxW = Math.max(...weights) * 1.1 || 1;
   const plotW = w - pad.left - pad.right;
   const plotH = h - pad.top - pad.bottom;
-
   ctx.strokeStyle = '#2e2e2e'; ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
     const y = pad.top + (plotH / 4) * i;
@@ -513,40 +777,35 @@ function drawChart(entries) {
     ctx.fillStyle = '#666'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
     ctx.fillText(Math.round(maxW - (maxW - minW) * (i / 4)), pad.left - 8, y + 4);
   }
-
   if (entries.length === 1) {
     ctx.fillStyle = '#60a5fa';
     ctx.beginPath(); ctx.arc(pad.left + plotW / 2, pad.top + plotH / 2, 5, 0, Math.PI * 2); ctx.fill();
     return;
   }
-
   const points = entries.map((e, i) => ({
     x: pad.left + (plotW / (entries.length - 1)) * i,
     y: pad.top + plotH - ((e.weight - minW) / (maxW - minW)) * plotH
   }));
-
   ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
   ctx.beginPath();
   points.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
   ctx.stroke();
-
   ctx.lineTo(points[points.length - 1].x, pad.top + plotH);
   ctx.lineTo(points[0].x, pad.top + plotH);
   ctx.closePath();
   ctx.fillStyle = 'rgba(96,165,250,0.1)'; ctx.fill();
-
   points.forEach(p => {
     ctx.fillStyle = '#60a5fa'; ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
   });
-
   ctx.fillStyle = '#666'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'center';
   const labelCount = Math.min(entries.length, 5);
   for (let i = 0; i < labelCount; i++) {
-    const idx = Math.round((entries.length - 1) * (i / (labelCount - 1)));
-    ctx.fillText(formatDateShort(entries[idx].date), points[idx].x, h - 8);
+    const idx2 = Math.round((entries.length - 1) * (i / (labelCount - 1)));
+    ctx.fillText(formatDateShort(entries[idx2].date), points[idx2].x, h - 8);
   }
 }
 
+// ─── Misc ─────────────────────────────────────────────────────────────────────
 function calcStreak() {
   const history = getHistory();
   if (history.length === 0) return 0;
