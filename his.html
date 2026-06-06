@@ -183,7 +183,7 @@
 <div class="page active" id="page-workout">
   <div class="page-header">My Workout</div>
   <div class="page-sub">Chest Focus, Shoulders, Back & Arms</div>
-  <div class="phase-badge" id="phase-badge">Phase 1: Pre-Surgery Push</div>
+  <div class="phase-badge" id="phase-badge">Return to Training — Week 1 (Wrist Recovery)</div>
   <div class="summary-cards" id="summary-cards"></div>
   <div class="workout-date" id="workout-date"></div>
   <div id="exercise-list"></div>
@@ -239,41 +239,41 @@ const WORKOUT = {
     {
       name: "Warm-Up",
       exercises: [
-        { name: "Arm Circles + Band Pull-Aparts + Push-Ups", sets: "3 min", note: "Get blood flowing to upper body.", trackWeight: false },
-        { name: "Light Bench Press", sets: "1 x 10-15", note: "Just the bar or very light. Warm up the chest.", trackWeight: false }
+        { name: "Arm Circles + Band Pull-Aparts + Push-Ups", sets: "5 min", note: "Spend extra time on wrist circles and shoulder warm-up. Ease into wrist extension — don't force range of motion.", trackWeight: false },
+        { name: "Light Bench Press (bar only)", sets: "2 x 15", note: "Just the bar — 45 lbs. Feel out the wrist under load before adding plates.", trackWeight: false }
       ]
     },
     {
       name: "Chest (Primary Focus)",
       exercises: [
-        { name: "Barbell Bench Press", sets: "4 x 8-10", note: "The foundation. Control down, explosive up. Go heavy with good form.", trackWeight: true },
-        { name: "Incline Dumbbell Press", sets: "3 x 10-12", note: "30-45 degree angle. Builds the upper chest shelf — biggest visual difference in a shirt.", trackWeight: true },
-        { name: "Cable Flyes", sets: "3 x 12-15", note: "Squeeze hard at the peak. Fills in inner and outer chest.", trackWeight: true },
-        { name: "Dips (Chest-Focused)", sets: "3 x 8-12", note: "Lean forward to target chest. Add weight belt if bodyweight is easy. Alt: decline DB press.", trackWeight: true }
+        { name: "Barbell Bench Press", sets: "3 x 12", note: "START LIGHT — 95 lbs (bar + 25s). Your pre-surgery weight was ~135. 2.5 months off means rebuild from 70%. Focus on full control, not weight. Stop if wrist feels off.", trackWeight: true },
+        { name: "Incline Dumbbell Press", sets: "3 x 12", note: "START: 25 lb dumbbells. DBs are safer than barbell right now — wrist can find neutral grip. 30-45 degree angle.", trackWeight: true },
+        { name: "Cable Flyes", sets: "3 x 15", note: "START: 15 lbs/side. Light, constant tension. No wrist stress here. Squeeze at the peak.", trackWeight: true },
+        { name: "Dips (Bodyweight Only)", sets: "3 x 8-10", note: "Bodyweight only today. Lean torso forward for chest focus. Skip if wrist hurts under load — do decline DB press instead.", trackWeight: false }
       ]
     },
     {
       name: "Shoulders & Back",
       exercises: [
-        { name: "Overhead Press", sets: "3 x 10", note: "Standing preferred — engages core. Builds capped shoulder look.", trackWeight: true },
-        { name: "Lateral Raises", sets: "3 x 15", note: "Light, slow, controlled. 15-20 lb dumbbells. Don't ego lift — these build width.", trackWeight: true },
-        { name: "Barbell/Dumbbell Rows", sets: "3 x 10", note: "Balance pushing with pulling. Keeps posture healthy and back thick.", trackWeight: true },
-        { name: "Face Pulls", sets: "3 x 15", note: "Rear delts + rotator cuff. Non-negotiable for shoulder health with pickleball.", trackWeight: true }
+        { name: "Dumbbell Overhead Press", sets: "3 x 12", note: "START: 30 lb dumbbells. Dumbbells over barbell — more wrist freedom at the top. Standing or seated.", trackWeight: true },
+        { name: "Lateral Raises", sets: "3 x 15", note: "START: 10-12 lbs. Light, slow, controlled. These build width. Wrist is neutral here — should be fine.", trackWeight: true },
+        { name: "Dumbbell Rows", sets: "3 x 12", note: "START: 40 lb dumbbell. Single-arm. Neutral grip is easiest on the wrist. Brace on a bench.", trackWeight: true },
+        { name: "Face Pulls", sets: "3 x 15", note: "START: 25 lbs. Rear delts + rotator cuff health. Critical for shoulder longevity. Rope attachment if available.", trackWeight: true }
       ]
     },
     {
       name: "Arms",
       exercises: [
-        { name: "Barbell/EZ-Bar Curls", sets: "3 x 10-12", note: "Fills out arms to match bigger chest.", trackWeight: true },
-        { name: "Tricep Overhead Extension", sets: "3 x 12", note: "Dumbbell or cable. Triceps are 2/3 of arm size.", trackWeight: true }
+        { name: "EZ-Bar Curls", sets: "3 x 12", note: "START: 40 lbs (EZ bar ~20 lbs + 10/side). EZ bar is easier on the wrist than straight bar. Control the negative.", trackWeight: true },
+        { name: "Tricep Pushdown (Cable)", sets: "3 x 15", note: "START: 30 lbs. Cable pushdown is safer on the wrist than overhead extension to start. Work back to overhead extension week 2.", trackWeight: true }
       ]
     },
     {
       name: "Core",
       exercises: [
-        { name: "Cable Woodchops", sets: "3 x 12 each", note: "Rotational core strength — directly benefits pickleball.", trackWeight: true },
-        { name: "Hanging Leg Raises", sets: "3 x 10-12", note: "Best ab exercise. Bend knees if straight legs are too hard.", trackWeight: false },
-        { name: "Plank", sets: "2 x 45-60 sec", note: "Build to 60 sec. Squeeze everything tight.", trackWeight: false }
+        { name: "Cable Woodchops", sets: "3 x 12 each", note: "START: 20 lbs. Rotational core. Light grip — don't white-knuckle if wrist is sore.", trackWeight: true },
+        { name: "Hanging Leg Raises", sets: "3 x 10", note: "Hang from bar — good test of wrist/grip strength recovery. Bend knees if needed.", trackWeight: false },
+        { name: "Plank", sets: "2 x 45 sec", note: "Build back to 60 sec next week. Squeeze tight.", trackWeight: false }
       ]
     }
   ]
