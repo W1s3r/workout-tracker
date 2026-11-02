@@ -38,6 +38,8 @@ cd C:\tools\highside-agent
 python -m hsa setup          :: writes %USERPROFILE%\.hsa\config.json + a global AGENT.md
 notepad %USERPROFILE%\.hsa\config.json   :: fill in the <PLACEHOLDERS>
 python -m hsa doctor         :: tests the API, tool calling, streaming, search sources, drives
+python -m hsa webtest "https://<SEARCH_HOST>/search?q={query}" --query test   :: how to reach the internal web
+python -m hsa evalloop       :: how well your model drives the agent loop
 ```
 
 4. Optional: add `C:\tools\highside-agent\scripts` to your PATH. You can then type `hsa` from any folder
@@ -73,7 +75,46 @@ Set `context_tokens` honestly for each model. Compaction, tool-output truncation
 size themselves from it. Use `roles` to choose which model does what. For example, `"fast": "gpt-oss"` sends
 search-result triage to a cheaper model.
 
-## 3. Configure intranet search (the big one)
+## 3. Reach the internal web (do this before configuring search)
+
+Getting a page's HTML from a script is often harder than opening it in a browser. Common reasons are a
+Windows/SSO login, a smart card, an internal certificate authority, or search results that are built by
+JavaScript. HSA has five ways to fetch a page:
+
+| Method | How it works | Handles |
+|---|---|---|
+| `python` | plain HTTP from Python | open sites; cookie or certificate you configure |
+| `curl` | `curl.exe`, built into Windows 10+, with `--negotiate` | **Windows login** (Kerberos/NTLM), Windows certificate store |
+| `powershell` | `Invoke-WebRequest -UseDefaultCredentials` | Windows login |
+| `headless` | a hidden Edge/Chrome that HSA drives | Windows login **and pages built with JavaScript** |
+| `cdp` | **your own logged-in Edge window**, driven in background tabs | **anything you can open by hand**: smart card, SSO portals, JavaScript |
+
+### Find what works
+
+```bat
+python -m hsa webtest "https://<SEARCH_HOST>/search?q={query}" --query "some known topic"
+```
+
+`webtest` tries each method and flags responses that are login pages or JavaScript shells. It then shows the
+search results it could extract and suggests an `include_url_regex`.
+
+### If only `cdp` works (typical with smart-card login)
+
+```bat
+python -m hsa browser "https://<SEARCH_HOST>/"
+```
+
+This opens a separate Edge window with its own profile, which HSA can control. Log in there once, as you
+normally would, then minimize the window and leave it open. HSA loads pages in background tabs of that
+window, so it has your session. Logins usually persist in that profile. Your existing hotkey script can run
+this command.
+
+Leave `"web": {"via": "auto"}` and HSA tries methods in the table's order, skipping ones that fail. It
+remembers which method worked for each host in `~/.hsa/web_methods.json`. A source can also force a method
+with `"via": "cdp"`. The agent can ask for a browser render of a single page with
+`fetch_url(..., render=true)`.
+
+## 4. Configure intranet search (the big one)
 
 Edit `search.sources` in the config (see `config.example.json` for every option), then run `python -m hsa
 doctor` to see sample results.
@@ -83,7 +124,7 @@ doctor` to see sample results.
 | only has a web page | `"type": "html"` with `"url": "https://host/search?q={query}&page={page}"`. Link and snippet extraction is heuristic and drops nav and pagination links. For precision, add `result_selector_regex` with named groups `url`, `title`, `snippet`. |
 | has a JSON API | `"type": "json"` with `url` (and `body` for POST), `results_path`, and a `fields` mapping. |
 | is Elasticsearch / Solr / SharePoint | `"type": "elasticsearch"` / `"solr"` / `"sharepoint"` |
-| needs Windows login (Kerberos/NTLM) or a smart card | Add `"http_command": "powershell ... scripts\\win_fetch.ps1 -Url {url} -Out {out}"` to that source, or to `search.fetch` for page fetching. |
+| needs Windows login, a smart card, or builds results with JavaScript | Covered by the web-access methods in section 3. `"via": "auto"` (the default) finds a working one, or you can force one per source with `"via": "cdp"`. |
 | is something else entirely | `"type": "command"`: any script that prints a JSON list of `{title, url, snippet}`. |
 
 Placeholders available in URLs and bodies: `{query}`, `{query_raw}`, `{page}`, `{page0}`, `{count}`,
@@ -123,7 +164,7 @@ The command is incremental, so re-run it to pick up changes; only modified files
 searches the index with `doc_search`. To include the index in deep research, add a source
 `{"type": "local_index"}`.
 
-## 4. Use it
+## 5. Use it
 
 ```bat
 cd C:\path\to\your\project
@@ -144,6 +185,9 @@ Inside the session:
 | `/init` | agent explores the project and writes `AGENT.md` |
 | `/reflect` | agent reviews the session and saves lessons to memory |
 | `/plan`, `/mode auto` | permission modes |
+| `/style …` | response style, language, format |
+| `/last` | why the last turn ended, how many auto-continues |
+| `/web <url>` | test internal-web access for a URL |
 | `/research …`, `/search …`, `/index …` | research tools directly |
 | `/compact`, `/context`, `/cost`, `/clear` | context management |
 | `/model gemini`, `/models` | switch models |
@@ -168,6 +212,69 @@ Put markdown files in `.hsa/commands/` (per project) or `~/.hsa/commands/` (glob
 SQL` runs `review.md` with `$ARGUMENTS` replaced by `focus on SQL`. There are starters in
 `examples/commands/` (`review`, `commit`, `brief`).
 
+### The agent loop: answering vs. working
+
+Every message is first routed:
+
+- **Chat**: "hi", "thanks". Gets a quick reply. No tools are offered, so a small model can't wander off.
+- **Task**: "fix…", "create…", "search…", a file path, "continue", or "yes" in reply to the agent's own
+  question.
+- **Auto**: everything else. The model decides: answer directly, or start using tools.
+
+Once the model is working with tools, it continues on its own until it stops calling them. At that point
+HSA checks whether it's really finished. These are the common small-model failures, and how HSA responds:
+
+| The model… | HSA |
+|---|---|
+| ends with "I'll now update the file." without doing it | tells it to do it now |
+| asks "Shall I proceed?" after you told it to | tells it to proceed (the permission system still asks *you* when needed) |
+| stops with todo items still open | lists them and tells it to continue, or to explain what's blocking it |
+| edited code but never ran it | reminds it once to run or test it, or to say it's untested |
+| returns an empty reply, or the reply is cut off | asks it to continue |
+| fails 4 tool calls in a row, or repeats the same call 3 times | adds a "step back and try a different approach" note |
+| runs out of steps | asks for a status summary (done / remaining / blocked); type `continue` to resume |
+
+A turn ends when the model gives a final answer, asks you a genuine question, or reports that it's blocked.
+Automatic continuations are capped (`agent.max_auto_continue`), so the loop can't run forever. Each
+continuation shows as a grey `(auto-continue: reason)` line, and `/last` shows how the last turn went.
+
+If your model ends tasks too early, set `"agent": {"completion": "finish_tool"}`. The model then has to call
+an explicit `finish(summary)` tool to end a task. **Measure rather than guess:**
+
+```bat
+python -m hsa evalloop                          :: 7 scenarios: chat, knowledge, create+run, find, multi-step, bug fix, blocked
+python -m hsa evalloop --completion finish_tool  :: compare ending styles
+python -m hsa evalloop --model gpt-oss           :: compare models
+python -m hsa evalloop --only fix_bug --verbose  :: watch one scenario
+```
+
+### Response style, formatting and language
+
+The style is added to every request:
+
+| Command | Effect |
+|---|---|
+| `/style` | show the current style and the available named styles |
+| `/style bluf` | use a named style: `concise` (default), `explanatory`, `bluf`, `plain` (no markdown, for pasting into email/Word), `report`, `default` |
+| `/style language Spanish` | answer in another language (code, paths and quotes stay unchanged) |
+| `/style verbosity detailed` | `terse` / `concise` / `normal` / `detailed` |
+| `/style format plain` | `markdown` / `plain` |
+| `/style tone professional, direct` | set the tone |
+| `/style custom Always give file paths as UNC paths` | add a standing instruction |
+| `/style save` | keep the settings in `~/.hsa/style.json`; `/style save project` keeps them for this project only |
+
+To make your own named style, put a markdown file of instructions in `~/.hsa/styles/NAME.md` and select it
+with `/style NAME`.
+
+Answers are also cleaned of artifacts small models leave behind:
+
+- leftover tool-call tags and special tokens
+- "Assistant:" prefixes
+- whole answers wrapped in a markdown code fence
+- "Let me know if you need anything else!" filler
+
+Markdown is rendered in the terminal (headings, bullets, code blocks), and it works while streaming.
+
 ### Permissions
 
 - `default` asks before any change.
@@ -183,14 +290,14 @@ agent receives it. Rules look like `"shell(git status*)"`, `"write_file(*.md)"`,
 `"hooks": {"post_tool": [{"match": "write_file|edit_file", "command": "python -m black -q ."}]}`. A failing
 `pre_tool` hook blocks the call. Hooks receive `HSA_TOOL` and `HSA_TOOL_INPUT` environment variables.
 
-## 5. Tools the agent has
+## 6. Tools the agent has
 
 `read_file` `write_file` `edit_file` `list_dir` `glob` `grep` `find_files` · `shell` `shell_output`
 `run_python` · `intranet_search` `fetch_url` `doc_search` `deep_research` · `gitlab` · `memory`
 `todo_write` `ask_user` `task` (sub-agents). Run `/tools` to see them, and add names to
 `agent.disabled_tools` to turn any of them off.
 
-## 6. Tests
+## 7. Tests
 
 ```bat
 python -m unittest discover -s tests -t .
@@ -207,6 +314,10 @@ to exercise a tool.
 hsa/
   cli.py          REPL, slash commands, subcommands (doctor/setup/index/research)
   agent.py        agent loop, permissions/hook dispatch, compaction, robustness
+  turn_policy.py  chat-vs-task routing and "is it really done?" auto-continue rules
+  style.py        response style/language/format + output cleanup;  mdrender.py  terminal markdown
+  webaccess.py    internal-web access: python/curl/powershell/headless/cdp (+ stdlib WebSocket)
+  evals.py        `hsa evalloop` behaviour scenarios
   config.py       layered JSON config with ${ENV:...} secrets
   context.py      AGENT.md loading, memory/todo/ask_user tools
   permissions.py  modes + allow/deny rules     ui.py  terminal UI

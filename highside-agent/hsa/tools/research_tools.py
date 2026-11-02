@@ -51,11 +51,19 @@ list links on the page (to navigate internal sites)."""
         "url": {"type": "string"},
         "focus": {"type": "string", "description": "What you are looking for (optional)"},
         "show_links": {"type": "boolean"},
+        "render": {"type": "boolean", "description": "Load in a real browser so JavaScript runs (slower; use if "
+                   "the page came back empty or looks like an app shell)"},
         "max_chars": {"type": "integer", "description": "Default 12000"},
     }, "required": ["url"]}
 
     def run(self, args, ctx):
-        page = Fetcher(ctx.config).fetch(args["url"])
+        via = None
+        if args.get("render"):
+            from hsa import webaccess
+            via = "cdp" if (webaccess.CDP().available() or webaccess.find_browser()) else None
+            if not via:
+                raise ToolError("render=true needs Edge/Chrome (set web.browser_path).")
+        page = Fetcher(ctx.config).fetch(args["url"], via=via)
         if page.error:
             raise ToolError("Fetch failed: %s" % page.error)
         maxc = int(args.get("max_chars") or 12000)

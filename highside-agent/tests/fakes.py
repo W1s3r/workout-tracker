@@ -108,6 +108,27 @@ class FakeIntranet:
                         k, DOCS[k][0], DOCS[k][1][:80]) for k in hits)
                     page = ("<html><body><nav><a href='/'>Home</a><a href='/help'>Help</a></nav>"
                             "<h1>Results</h1>%s<a href='/search?q=x&page=2'>Next</a></body></html>" % items)
+                elif u.path == "/jsearch":
+                    # results are built by JavaScript - invisible to plain HTTP clients
+                    q = urllib.parse.parse_qs(u.query).get("q", [""])[0]
+                    page = ("<html><head><title>App</title><script>window.onload = function(){"
+                            "setTimeout(function(){var d=document.getElementById('r');"
+                            "d.innerHTML=\"<a href='/doc/1'>Project Falcon Overview</a><p>Falcon logistics modernization "
+                            "program overview</p><a href='/doc/3'>Falcon schedule memo</a><p>IOC is March 2027</p>"
+                            "<p>query was " + "\" + q + \"</p>\";}, 300);};</script></head>"
+                            "<body><div id='r'></div><noscript>enable js</noscript></body></html>").replace(
+                        "\" + q + \"", q.replace("<", ""))
+                elif u.path == "/login-wall":
+                    page = ("<html><head><title>Sign In - Portal</title></head><body><form>"
+                            "<input name=u><input type=password name=p></form></body></html>")
+                elif u.path == "/file.pdf":
+                    data = b"%PDF-1.4 fake pdf bytes \x00\x01\x02"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/pdf")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
                 elif u.path.startswith("/doc/"):
                     k = u.path.split("/")[-1]
                     if k not in DOCS:

@@ -92,7 +92,19 @@ DEFAULTS: Dict[str, Any] = {
         "keep_recent_messages": 8,
         "context_file_names": ["AGENT.md", "CLAUDE.md"],
         "show_reasoning": False,
+        # ---- turn loop (see hsa/turn_policy.py) ----
+        "router": True,                  # greetings/thanks get a plain reply without tools
+        "completion": "text",            # "text": a final reply ends the turn; "finish_tool": model must call finish
+        "max_auto_continue": 5,          # max automatic "keep going" nudges per turn
+        "max_nudges_per_reason": 2,
+        "verify_nudge": True,            # nudge once to run/test code that was edited but never run
+        "stuck_after_errors": 4,         # consecutive failed tool calls before a "step back" note
+        "strip_filler": True,            # drop "Let me know if you need anything else!" endings
     },
+    # ---- response style (also /style at runtime) ----
+    # name: concise | explanatory | bluf | plain | report | default | <your ~/.hsa/styles/NAME.md>
+    "style": {"name": "concise", "language": "English", "verbosity": "concise",
+              "format": "markdown", "tone": "", "custom": ""},
     # default | accept_edits | auto | plan
     "permissions": {
         "mode": "default",
@@ -152,6 +164,18 @@ DEFAULTS: Dict[str, Any] = {
                        ".html", ".htm", ".py", ".ps1", ".sh", ".sql", ".yaml",
                        ".yml", ".ini", ".cfg", ".docx", ".pptx", ".xlsx", ".pdf"],
         "max_file_mb": 25,
+    },
+    # ---- Internal web access (see hsa/webaccess.py, `python -m hsa webtest URL`) ----
+    "web": {
+        "via": "auto",              # auto | python | curl | powershell | headless | cdp
+        "auto_order": ["python", "curl", "powershell", "cdp", "headless"],
+        "browser_path": None,       # null = find Edge/Chrome automatically
+        "cdp_port": 9222,
+        "profile_dir": None,        # default ~/.hsa/browser-profile
+        "auto_launch": True,        # start a headless browser for 'cdp' if none is running
+        "render_wait": 3,           # seconds to let JavaScript-built pages settle
+        "auth_server_allowlist": "*",  # hosts the browser may send Windows login to, e.g. "*.corp.local"
+        "headless_timeout": 60,
     },
     # ---- GitLab ------------------------------------------------------------
     "gitlab": {
@@ -286,7 +310,10 @@ def load_config(extra_path: Optional[str] = None, cwd: Optional[Path] = None) ->
             data = deep_merge(data, _load_json(p))
             sources.append(str(p))
     data = _expand_env(data)
-    return Config(data, root, sources)
+    cfg = Config(data, root, sources)
+    from hsa import net
+    net.configure_web(cfg)
+    return cfg
 
 
 def write_starter_config(path: Path) -> None:

@@ -45,6 +45,8 @@
 | Self-updating memory | `memory` tool + `/reflect` | ✅ |
 | Permission modes, allow/deny rules | default / accept_edits / auto / plan | ✅ |
 | Hooks | `pre_tool` / `post_tool` | ✅ (basic) |
+| Output styles | `/style` (named styles, language, verbosity, format) | ✅ |
+| Browser automation | `webaccess` (headless and logged-in browser via DevTools protocol) | ✅ |
 | Slash commands, custom commands | built-ins + `.hsa/commands/*.md` | ✅ |
 | /compact, auto-compact, /context, /cost | ✅ | ✅ |
 | /init, /resume, --continue, -p | ✅ | ✅ |
@@ -55,9 +57,18 @@
 | Skills (packaged instructions + scripts) | custom commands cover most uses | Roadmap |
 | Images / vision, IDE integration | — | Depends on the model and API |
 
+## The agent loop (how a turn ends)
+
+`turn_policy.py` routes each message to chat, task, or auto. When the model stops calling tools, a set of
+checks decides whether the task is actually done. If not, HSA sends a capped "auto-continue" nudge. The
+cases covered: announced-but-not-done, unnecessary "shall I proceed?", open todos, edited-but-untested code,
+empty or truncated replies, error streaks, repeated calls, and the step limit. The alternative ending
+mode, `completion: finish_tool`, makes the model call `finish()` explicitly. `hsa evalloop` measures both
+modes on 7 scenarios with your real model, so tuning is based on data.
+
 ## Roadmap (suggested order once it runs on the high side)
 
-1. **Calibrate on real systems.** Run `doctor`, fill in `context_tokens`, pick `tool_mode`, and write the
+1. **Calibrate on real systems.** Run `hsa evalloop` and `hsa webtest` first. Run `doctor`, fill in `context_tokens`, pick `tool_mode`, and write the
    `html` search source regex for the real engine. Load the glossary with your org's acronyms.
 2. **Measure research quality.** Collect 10 real research questions with known answers. Tune
    `queries_per_round`, `pages_to_read_per_round`, and `max_rounds`, and try `fast` on a different model.
@@ -78,8 +89,9 @@
 3. **OS and shell.** Windows with PowerShell? Is Git for Windows installed, so `git` is on PATH? Which Python
    version does Anaconda have?
 4. **Search engine.** What product is it, if known? Does it have a JSON API, or only an HTML results page?
-   How does it authenticate: nothing, Windows login (Kerberos/NTLM), smart card, or a session cookie? This
-   decides between plain `html`/`json` sources and the `http_command` PowerShell route.
+   `python -m hsa webtest <search-url-with-{query}>` answers how to reach it: it tries Python, curl
+   (Windows login), PowerShell, a headless browser, and your logged-in browser (`hsa browser`). Send me the
+   (redacted) output if extraction looks wrong.
 5. **Network drives.** UNC paths (`\\server\share`), mapped letters, or both? How large are they? (This
    decides whether to index them.)
 6. **GitLab.** Can you create a personal access token (`api` scope)? Is it self-signed TLS (then you need

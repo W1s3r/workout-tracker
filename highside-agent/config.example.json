@@ -49,6 +49,33 @@
   // main = the agent, fast = cheap triage/summaries, research = deep research reasoning
   "roles": {"main": "inkling-small", "fast": "inkling-small", "research": "inkling-small"},
 
+  // How the agent loop behaves (see README "The agent loop"). Measure with: python -m hsa evalloop
+  "agent": {
+    "completion": "text",          // "text": a final reply ends a task. "finish_tool": model must call finish()
+    "max_steps_per_turn": 40,
+    "max_auto_continue": 5,        // automatic "keep going" nudges per turn (announced-but-not-done, open todos...)
+    "verify_nudge": true,          // remind once to run/test code it edited but never ran
+    "router": true                 // "hi"/"thanks" get a quick reply with no tools
+  },
+
+  // How answers look. Change live with /style, keep with /style save.
+  "style": {
+    "name": "concise",             // concise | explanatory | bluf | plain | report | default | your ~/.hsa/styles/NAME.md
+    "language": "English",
+    "verbosity": "concise",        // terse | concise | normal | detailed
+    "format": "markdown",          // markdown | plain (for pasting into email/Word)
+    "tone": "",                    // e.g. "professional, direct"
+    "custom": ""                   // any extra standing instruction
+  },
+
+  // How HSA reaches internal web pages. Run: python -m hsa webtest "https://<SEARCH_HOST>/search?q={query}" --query test
+  "web": {
+    "via": "auto",                 // auto | python | curl | powershell | headless | cdp
+    "browser_path": null,          // null = find Edge/Chrome automatically
+    "auth_server_allowlist": "*",  // hosts the browser may send your Windows login to, e.g. "*.<YOUR_DOMAIN>"
+    "render_wait": 3               // seconds to let JavaScript-built pages finish
+  },
+
   "permissions": {
     "mode": "default",
     "allow": ["shell(git status*)", "shell(git diff*)", "shell(git log*)", "shell(dir*)", "shell(ls*)"],

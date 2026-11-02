@@ -8,6 +8,9 @@
   python -m hsa research "question"   run deep research directly
   python -m hsa index PATH|LOCATION   build/refresh the local document index
   python -m hsa setup                 write a starter config to ~/.hsa/config.json
+  python -m hsa webtest URL [--query Q]  find a way to reach internal web pages / search
+  python -m hsa browser [URL]         open a browser HSA can drive; log in there once
+  python -m hsa evalloop              measure how well the model drives the agent loop
 """
 from __future__ import annotations
 
@@ -46,6 +49,11 @@ HELP = """Commands:
   /cost                    token usage this session
   /sessions, /resume [id]  list / resume saved sessions
   /doctor                  test API and search configuration
+  /style [name|key value]  response style: /style bluf, /style language Spanish,
+                           /style verbosity detailed, /style format plain, /style custom <text>,
+                           /style save [global|project], /style reset
+  /last                    how the last turn ran (steps, auto-continues, why it ended)
+  /web <url>               test which internal-web access methods work for a URL
 Shortcuts:
   # note                   save a note to project memory   (#g note -> global memory)
   !command                 run a shell command yourself; output is shared with the agent
@@ -79,7 +87,7 @@ class App:
         home.mkdir(parents=True, exist_ok=True)
         self.custom_cmds = self._load_custom_commands()
         cmds = ["/" + c for c in ("help exit quit clear compact context memory init reflect model models mode plan "
-                                  "search research index todos tools cd jobs cost sessions resume doctor").split()]
+                                  "search research index todos tools cd jobs cost sessions resume doctor style last web").split()]
         cmds += ["/" + c for c in self.custom_cmds]
         self.ui = UI(self.config, color=self.config.get("ui", "color", default=True),
                      history_file=home / "history", commands=cmds)
@@ -281,6 +289,22 @@ class App:
         elif cmd == "doctor":
             from hsa.doctor import run_doctor
             run_doctor(self.config, a.llm.name)
+        elif cmd == "style":
+            self.style_cmd(arg)
+        elif cmd == "last":
+            st = a.last_turn
+            if not st:
+                self.ui.info("No turn yet.")
+            else:
+                self.ui.info("route=%s steps=%d ended_by=%s auto-continues=%s tools=%s" % (
+                    st.route, st.steps, st.ended_by, ",".join(st.nudges) or "none",
+                    ", ".join(st.tools_used) or "none"))
+        elif cmd == "web":
+            from hsa import webaccess
+            if not arg:
+                self.ui.info("usage: /web <url>   (use {query} in the URL to also test result extraction)")
+            else:
+                webaccess.webtest(arg.split()[0], " ".join(arg.split()[1:]) or None)
         elif cmd in self.custom_cmds:
             body = self.custom_cmds[cmd].read_text(encoding="utf-8")
             body = body.replace("$ARGUMENTS", arg)
@@ -288,6 +312,35 @@ class App:
         else:
             self.ui.error("Unknown command /%s - try /help" % cmd)
         return True
+
+    def style_cmd(self, arg: str):
+        from hsa.style import BUILTIN_STYLES, DEFAULT_STYLE, available_styles, current_style, save_style
+        cfg = self.config
+        if not hasattr(cfg, "style_overrides"):
+            cfg.style_overrides = {}
+        words = arg.split(None, 1)
+        if not words:
+            st = current_style(cfg)
+            self.ui.info("Current style: " + ", ".join("%s=%s" % (k, v) for k, v in st.items() if v))
+            self.ui.info("Named styles: " + ", ".join(sorted(available_styles(cfg))))
+            self.ui.info("Your own: put NAME.md in %s" % (cfg.home / "styles"))
+            return
+        key = words[0].lower()
+        val = words[1].strip() if len(words) > 1 else ""
+        if key == "reset":
+            cfg.style_overrides = {}
+            self.ui.info("Style overrides cleared (saved style files are unchanged).")
+        elif key == "save":
+            p = save_style(cfg, cfg.style_overrides, "project" if val == "project" else "global")
+            self.ui.info("Saved %s to %s" % (cfg.style_overrides, p))
+        elif key in ("language", "verbosity", "format", "tone", "custom", "name"):
+            cfg.style_overrides[key] = val
+            self.ui.info("style %s = %r (this session; /style save to keep)" % (key, val))
+        elif key in available_styles(cfg):
+            cfg.style_overrides["name"] = key
+            self.ui.info("Using style '%s' (this session; /style save to keep)" % key)
+        else:
+            self.ui.error("Unknown style or setting '%s'. Try /style to list options." % key)
 
     def resume(self, sid: Optional[str]):
         recent = Session.list_recent(self.config.home, 30)
@@ -368,6 +421,45 @@ def main(argv: Optional[List[str]] = None):
         from hsa.doctor import run_doctor
         run_doctor(load_config(args.config), args.model)
         return
+    if sub == "webtest":
+        ap.add_argument("cmd")
+        ap.add_argument("url")
+        ap.add_argument("--query", help="search words to substitute for {query} in the URL")
+        ap.add_argument("--methods", help="comma list: python,curl,powershell,headless,cdp")
+        args = ap.parse_args(argv)
+        load_config(args.config)
+        from hsa import webaccess
+        webaccess.webtest(args.url, args.query, args.methods.split(",") if args.methods else None)
+        return
+    if sub == "browser":
+        ap.add_argument("cmd")
+        ap.add_argument("url", nargs="?", default="about:blank")
+        args = ap.parse_args(argv)
+        load_config(args.config)
+        from hsa import webaccess
+        cdp = webaccess.CDP()
+        if cdp.available():
+            print("A browser is already listening on DevTools port %d - HSA will use it." % cdp.port)
+            return
+        cdp.launch(headless=False, url=args.url)
+        print("Opened a browser window that HSA can drive (DevTools port %d, profile %s)." % (
+            cdp.port, webaccess.profile_dir("cdp")))
+        print("1. In that window, open your internal sites and log in (smart card / SSO) as usual.")
+        print("2. Keep the window open (minimize it). HSA loads pages in background tabs.")
+        print("3. Test with:  python -m hsa webtest <url> --methods cdp")
+        print("Logins usually persist in this profile, so next time a hidden copy can start automatically.")
+        return
+    if sub == "evalloop":
+        ap.add_argument("cmd")
+        ap.add_argument("--only", help="comma list of scenario names")
+        ap.add_argument("--completion", choices=["text", "finish_tool"])
+        ap.add_argument("--verbose", action="store_true")
+        args = ap.parse_args(argv)
+        app = App(args)
+        if args.completion:
+            app.config.data["agent"]["completion"] = args.completion
+        from hsa.evals import run_evals
+        sys.exit(run_evals(app, args.only.split(",") if args.only else None, args.verbose))
     if sub == "setup":
         from hsa.config import HOME_DIR
         p = HOME_DIR / "config.json"

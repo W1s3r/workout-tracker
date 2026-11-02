@@ -39,6 +39,8 @@ def make_config(tmp: Path, **overrides) -> Config:
     cfg = Config(data, tmp, ["test"])
     cfg.home = tmp / ".hsa_home"
     cfg.home.mkdir(parents=True, exist_ok=True)
+    from hsa import net
+    net.configure_web(cfg)
     return cfg
 
 

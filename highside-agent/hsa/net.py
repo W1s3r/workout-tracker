@@ -48,13 +48,42 @@ def build_opener(cfg: Dict[str, Any]) -> urllib.request.OpenerDirector:
     return urllib.request.build_opener(*handlers)
 
 
+# Web-access settings (config["web"]); set by configure_web() at startup.
+WEB: Dict[str, Any] = {"via": "auto"}
+WEB_HOME = __import__("pathlib").Path.home() / ".hsa"
+
+
+def configure_web(config) -> None:
+    global WEB_HOME
+    WEB.clear()
+    WEB.update(config.get("web") or {})
+    WEB_HOME = config.home
+
+
 def request(url: str, cfg: Dict[str, Any], method: str = "GET", data: Optional[bytes] = None,
             headers: Optional[Dict[str, str]] = None, timeout: Optional[float] = None,
             stream: bool = False, max_bytes: Optional[int] = None):
     """Perform a request. Returns (status, headers, body_bytes) or, if stream=True,
-    the raw response object (caller must close)."""
-    if cfg.get("http_command") and method == "GET" and not stream:
-        return _command_get(url, cfg, timeout, max_bytes)
+    the raw response object (caller must close).
+
+    GETs made for web content (search sources, page fetching: cfg["_web"] is set)
+    go through the configured web-access method (see hsa/webaccess.py)."""
+    if method == "GET" and not stream and data is None:
+        if cfg.get("http_command"):
+            return _command_get(url, cfg, timeout, max_bytes)
+        via = cfg.get("via") or (WEB.get("via", "auto") if cfg.get("_web") else "python")
+        if via != "python":
+            from hsa import webaccess
+            if headers:
+                cfg = dict(cfg, headers=dict(cfg.get("headers") or {}, **headers))
+            st, hd, body = webaccess.web_get(url, cfg, timeout or cfg.get("timeout", 60), max_bytes, via)
+            if st >= 400:
+                raise HTTPError("HTTP %s from %s" % (st, url), st, body[:2000].decode("utf-8", "replace"))
+            return st, hd, body
+    return _urllib_request(url, cfg, method, data, headers, timeout, stream, max_bytes)
+
+
+def _urllib_request(url, cfg, method="GET", data=None, headers=None, timeout=None, stream=False, max_bytes=None):
     hdrs = dict(cfg.get("headers") or {})
     if cfg.get("cookie"):
         hdrs["Cookie"] = cfg["cookie"]

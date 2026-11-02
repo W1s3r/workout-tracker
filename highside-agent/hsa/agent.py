@@ -15,6 +15,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from hsa.context import load_context
 from hsa.llm.base import LLMError, estimate_tokens
+from hsa.style import clean_response, style_prompt
+from hsa.turn_policy import CHAT, STUCK_NOTE, TurnState, decide_after_text, route
 from hsa.tools import build_tools
 from hsa.tools.base import ToolContext, ToolError, truncate, validate_args
 from hsa.tools.shell import detect_shell, shell_kind
@@ -24,9 +26,24 @@ CORE_PROMPT = """You are HSA, an autonomous assistant running in the user's term
 You help with software engineering, scripting, file management across local and network drives,
 git/GitLab work, and research using the internal search engine. You act by calling tools.
 
-# How to work
-- Use tools to look things up; never guess file contents, paths, or facts. Read a file before editing it.
-- For tasks with 3+ steps, call todo_write first, keep it updated, and work through it item by item.
+# Answer or act?
+- If the message is conversation, a general-knowledge question, or asks for an explanation/opinion that does
+  not depend on the user's files, systems or internal information: just answer. Do not call tools.
+- If it asks you to DO something (create, fix, find, run, search, research, change...) or the answer depends
+  on files, systems or internal information: work on it with tools.
+
+# Working on a task
+- Work AUTONOMOUSLY until the task is completely done. Do not stop to report progress, and do not ask
+  permission for routine steps - the system asks the user when an action needs approval.
+- Never announce an action without doing it: instead of "I will now edit the file", call edit_file.
+- For tasks with 3+ steps, call todo_write first, keep it updated, mark items completed as you go.
+- Stop ONLY when (a) the task is done, or (b) you are truly blocked: you need information or a decision only
+  the user can give, access/permission was denied, or repeated different approaches have failed.
+- When done, reply with a short final message: what you did, the results (paths, outputs), and anything
+  left undone or untested. When blocked, say exactly what is blocking you and what you need.
+
+# How to use tools
+- Never guess file contents, paths, or facts - look them up. Read a file before editing it.
 - Prefer the dedicated tools: read_file/list_dir/glob/grep/find_files for files, edit_file for changes,
   shell for git/builds/tests, run_python for computation and data work.
 - Finding things: find_files (by name, across network locations), grep (contents), doc_search (indexed
@@ -34,7 +51,7 @@ git/GitLab work, and research using the internal search engine. You act by calli
   acronym variants), fetch_url (read a page/document), deep_research (big multi-source questions).
 - Use the task tool to delegate a self-contained investigation to a sub-agent when it would otherwise
   fill your context with lots of file contents or search results.
-- After writing code, run it or its tests to verify. If something fails, read the error and fix it.
+- After writing or changing code, run it or its tests to verify. If something fails, read the error and fix it.
 - When a tool returns an error, read it carefully and correct your call; don't repeat the same call.
 - Git: do not commit, push, force-push, or delete branches unless the user asked. Never discard user work.
 - Be careful with destructive commands (delete, overwrite, move) - especially on network shares.
@@ -43,10 +60,14 @@ git/GitLab work, and research using the internal search engine. You act by calli
 Your memory files (AGENT.md) are shown below under <context>. Use the memory tool PROACTIVELY to save
 durable knowledge for future sessions: user corrections and preferences, build/test commands, important
 paths and network locations, project conventions, and lessons from mistakes. Keep notes short.
-
-# Communication
-Be concise and direct. Use markdown. When you finish a task, briefly state what you did and the result.
 Cite file paths as path:line and sources as URLs."""
+
+FINISH_TOOL_NOTE = """
+# Ending a task
+When you have been working with tools, end the task by calling the finish tool with a summary
+(status "done", or "blocked"/"needs_input" with what you need). For simple conversational answers, just reply."""
+
+CHAT_NOTE = "(This message is conversational. Reply naturally and briefly; no tools are needed.)"
 
 PLAN_MODE = """
 # PLAN MODE IS ACTIVE
@@ -77,6 +98,11 @@ class Agent:
         self.keep_recent = int(acfg.get("keep_recent_messages", 8))
         self.max_tool_chars = int(acfg.get("max_tool_output_chars", 16000))
         self._git_info_cache: Optional[str] = None
+        self.loop_cfg = acfg
+        self.completion = acfg.get("completion", "text")
+        if self.completion != "finish_tool":
+            self.tools.pop("finish", None)
+        self.last_turn: Optional[TurnState] = None
 
     # ------------------------------------------------------- system prompt --
     def _git_info(self) -> str:
@@ -107,6 +133,9 @@ class Agent:
             env.append("Network/file locations: " + ", ".join("%s=%s" % kv for kv in locs.items()))
         env.append("Intranet search sources: " + (", ".join(srcs) if srcs else "none configured"))
         parts = [CORE_PROMPT, "\n".join(env)]
+        parts.append(style_prompt(self.config))
+        if self.completion == "finish_tool" and "finish" in self.tools:
+            parts.append(FINISH_TOOL_NOTE)
         if self.permissions.mode == "plan":
             parts.append(PLAN_MODE)
         ctx_text, _ = load_context(self.config, self.ctx.cwd)
@@ -123,18 +152,30 @@ class Agent:
 
     # ----------------------------------------------------------- the loop --
     def run_turn(self, user_text: str, quiet: bool = False) -> str:
+        """Run one user turn: call the model, execute tools, and keep going until
+        the task is done, the model is blocked/asking the user, or a limit hits."""
+        prev_text = next((m.get("content") or "" for m in reversed(self.messages)
+                          if m["role"] == "assistant" and (m.get("content") or "").strip()), "")
+        prev_engaged = bool(self.last_turn and self.last_turn.engaged)
         self.messages.append({"role": "user", "content": user_text})
         self._git_info_cache = None
+        st = TurnState(route=route(user_text, prev_text, prev_engaged) if self.loop_cfg.get("router", True) else "auto")
+        self.last_turn = st
         final = ""
         seen_calls: Dict[str, int] = {}
-        nudged_empty = False
-        self.steps_last_turn = 0
         stream_cb = None if (quiet or self.depth) else self.ui.stream
         try:
-            for step in range(self.max_steps):
-                self.steps_last_turn = step + 1
+            while True:
+                if st.steps >= self.max_steps:
+                    final = self._step_limit_summary(quiet)
+                    st.ended_by = "step_limit"
+                    break
+                st.steps += 1
                 self.maybe_compact()
                 msgs = [{"role": "system", "content": self.system_prompt()}] + self.messages
+                offer_tools = not (st.route == CHAT and not st.engaged)
+                if not offer_tools:
+                    msgs[-1] = dict(msgs[-1], content=msgs[-1]["content"] + "\n\n" + CHAT_NOTE)
                 self.ui.reset_stream()
                 self.ui.start_thinking()
                 streamed = [False]
@@ -144,57 +185,99 @@ class Agent:
                         _s[0] = True
                     stream_cb(kind, chunk)
                 try:
-                    resp = self.llm.chat(msgs, tools=self.tool_schemas(), stream_cb=cb if stream_cb else None)
+                    resp = self.llm.chat(msgs, tools=self.tool_schemas() if offer_tools else None,
+                                         stream_cb=cb if stream_cb else None)
                 except LLMError as e:
                     self.ui.stop_thinking()
-                    self.ui.error("Model error: %s" % e)
-                    if "context" in str(e).lower() and "length" in str(e).lower() or "too long" in str(e).lower():
+                    err = str(e).lower()
+                    if ("context" in err and "length" in err) or "too long" in err or "maximum context" in err:
                         self.ui.warn("Context too long - compacting and retrying.")
                         self.compact(force=True)
                         continue
+                    self.ui.error("Model error: %s" % e)
+                    st.ended_by = "error"
                     break
                 self.ui.stop_thinking()
-                if resp.reasoning:
-                    self.ui.reasoning(resp.reasoning) if not streamed[0] else None
-                asst: Dict[str, Any] = {"role": "assistant", "content": resp.content or ""}
+                if resp.reasoning and not streamed[0]:
+                    self.ui.reasoning(resp.reasoning)
+                content = clean_response(resp.content or "", self.loop_cfg.get("strip_filler", True))
+                asst: Dict[str, Any] = {"role": "assistant", "content": content}
                 if resp.tool_calls:
                     asst["tool_calls"] = [tc.to_message_dict() for tc in resp.tool_calls]
                 self.messages.append(asst)
-                if resp.content.strip() and not quiet:
-                    self.ui.assistant_message(resp.content, streamed[0])
-                elif streamed[0]:
-                    self.ui.assistant_message("", True)
+                if not quiet and (content.strip() or streamed[0]):
+                    self.ui.assistant_message(content, streamed[0])
+
+                # ---- model replied without tools: done, or auto-continue? ----
                 if not resp.tool_calls:
-                    if not resp.content.strip() and not nudged_empty:
-                        nudged_empty = True
-                        self.messages.append({"role": "user", "content": "(Your last reply was empty. Continue the task: "
-                                              "call a tool, or give your final answer.)"})
+                    nudge = decide_after_text(st, content, resp.finish_reason, self.ctx.todos, self.loop_cfg)
+                    if nudge:
+                        if not quiet:
+                            self.ui.info("  (auto-continue: %s)" % st.nudges[-1])
+                        if st.nudges[-1] == "truncated":
+                            final += content
+                        self.messages.append({"role": "user", "content": nudge, "_auto": True})
                         continue
-                    if resp.finish_reason == "length" and step < self.max_steps - 1:
-                        self.messages.append({"role": "user", "content": "(Your reply was cut off. Continue exactly where you stopped.)"})
-                        final += resp.content
-                        continue
-                    final += resp.content
+                    final += content
+                    st.ended_by = "text"
                     break
+
+                # ---- execute tool calls ----
+                finish_call = None
                 for tc in resp.tool_calls:
+                    if tc.name == "finish" and "finish" in self.tools:
+                        finish_call = tc
+                        continue
                     sig = tc.name + json.dumps(tc.arguments, sort_keys=True)
                     seen_calls[sig] = seen_calls.get(sig, 0) + 1
                     result = self.execute_tool(tc)
+                    ok = not result.startswith(("Error", "Blocked", "The user denied", "Plan mode"))
+                    st.record_tool(tc.name, tc.arguments, ok)
                     if seen_calls[sig] >= 3:
                         result += ("\n\n[NOTE: you have made this exact call %d times this turn. Stop repeating it; "
                                    "try a different approach or explain what is blocking you.]" % seen_calls[sig])
+                    if st.consecutive_errors >= int(self.loop_cfg.get("stuck_after_errors", 4)):
+                        result += STUCK_NOTE.format(n=st.consecutive_errors)
                     self.messages.append({"role": "tool", "tool_call_id": tc.id, "name": tc.name, "content": result})
-            else:
-                self.ui.warn("Stopped after %d steps (max_steps_per_turn). Say 'continue' to keep going." % self.max_steps)
+                if finish_call is not None:
+                    summary = clean_response(str(finish_call.arguments.get("summary") or ""))
+                    st.finish_status = finish_call.arguments.get("status") or "done"
+                    self.messages.append({"role": "tool", "tool_call_id": finish_call.id, "name": "finish",
+                                          "content": "Turn ended."})
+                    self.messages.append({"role": "assistant", "content": summary})
+                    if not quiet:
+                        if st.finish_status != "done":
+                            self.ui.warn("[%s]" % st.finish_status)
+                        self.ui.assistant_message(summary, False)
+                    final += summary
+                    st.ended_by = "finish"
+                    break
         except KeyboardInterrupt:
             self.ui.stop_thinking()
             self.ui.warn("\nInterrupted.")
             self._repair_after_interrupt()
             self.messages.append({"role": "user", "content": "[The user interrupted the previous action.]"})
             self.messages.append({"role": "assistant", "content": "Stopped. What would you like me to do?"})
+            st.ended_by = "interrupted"
         if self.on_change:
             self.on_change()
         return final
+
+    def _step_limit_summary(self, quiet: bool) -> str:
+        """Out of steps: ask the model (without tools) for a status report."""
+        self.ui.warn("Reached the step limit (%d). Asking for a status summary..." % self.max_steps)
+        self.messages.append({"role": "user", "content": (
+            "(Step limit reached - stop working now. Summarize for the user: what is done, what remains, "
+            "and what is blocking, if anything. The user can say 'continue' to resume.)"), "_auto": True})
+        try:
+            resp = self.llm.chat([{"role": "system", "content": self.system_prompt()}] + self.messages)
+            text = clean_response(resp.content or "")
+        except LLMError as e:
+            text = "Stopped at the step limit (summary failed: %s). Say 'continue' to keep going." % e
+        self.messages.append({"role": "assistant", "content": text})
+        if not quiet:
+            self.ui.assistant_message(text, False)
+        return text
 
     def _repair_after_interrupt(self):
         """Ensure every tool_call has a tool result (APIs reject dangling calls)."""

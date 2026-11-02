@@ -60,6 +60,9 @@ class UI:
         self.console = Console() if HAVE_RICH else None
         self.show_reasoning = bool(config.get("agent", "show_reasoning", default=False)) if config else False
         self._streamed = False
+        self._md_stream = None
+        self.render_md = bool(config.get("ui", "markdown", default=True)) if config else True
+        self.strip_filler = bool(config.get("agent", "strip_filler", default=True)) if config else True
         self._thinking_shown = False
         self._spin_stop: Optional[threading.Event] = None
         self.session = None
@@ -143,24 +146,43 @@ class UI:
         if not self._streamed:
             sys.stdout.write("\n")
             self._streamed = True
+        if self.render_md:
+            if self._md_stream is None:
+                from hsa.mdrender import MarkdownStream
+
+                def w(s):
+                    sys.stdout.write(s)
+                    sys.stdout.flush()
+                from hsa.style import FILLER_LINE
+                self._md_stream = MarkdownStream(w, color=self.color, skip=FILLER_LINE if self.strip_filler else None)
+            self._md_stream.feed(chunk)
+            return
         sys.stdout.write(chunk)
         sys.stdout.flush()
 
     def assistant_message(self, text: str, was_streamed: bool):
         self.stop_thinking()
         if was_streamed:
-            sys.stdout.write("\n")
+            if self._md_stream is not None:
+                self._md_stream.flush()
+                self._md_stream = None
+            else:
+                sys.stdout.write("\n")
             sys.stdout.flush()
         elif text.strip():
             self._print()
-            if self.md and self.console:
+            if self.md and self.console and self.color:
                 self.console.print(Markdown(text))
+            elif self.render_md:
+                from hsa.mdrender import render
+                self._print(render(text, self.color))
             else:
                 self._print(text)
         self._streamed = False
 
     def reset_stream(self):
         self._streamed = False
+        self._md_stream = None
 
     def reasoning(self, text: str):
         if self.show_reasoning and text:
