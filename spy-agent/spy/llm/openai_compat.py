@@ -26,6 +26,10 @@ class OpenAICompatClient(LLMClient):
         self.temperature = profile.get("temperature", 0.2)
         self.extra_body = profile.get("extra_body") or {}
         self.chat_path = self.pcfg.get("chat_path", "/chat/completions")
+        if self.context_auto:
+            self.apply_context_limit(self.detect_context_length())
+        elif profile.get("context_cap"):
+            self.apply_context_limit(None)
 
     # -- request ---------------------------------------------------------
     def _headers(self) -> Dict[str, str]:
@@ -187,6 +191,30 @@ class OpenAICompatClient(LLMClient):
     def list_models(self) -> List[str]:
         data = net.get_json(self.base_url + "/models", self.pcfg, self._headers())
         return [m.get("id") for m in data.get("data", [])]
+
+    CONTEXT_KEYS = ("max_model_len", "context_length", "max_context_length", "context_window",
+                    "max_input_tokens", "max_position_embeddings")
+
+    def model_info(self) -> Dict[str, Any]:
+        """The /models entry for this model (vLLM includes max_model_len)."""
+        cfg = dict(self.pcfg, timeout=min(10, self.pcfg.get("timeout", 10)), max_retries=0)
+        data = net.get_json(self.base_url + "/models", cfg, self._headers())
+        items = data.get("data", []) if isinstance(data, dict) else []
+        for m in items:
+            if m.get("id") == self.model:
+                return m
+        return items[0] if len(items) == 1 else {}
+
+    def detect_context_length(self) -> Optional[int]:
+        try:
+            info = self.model_info()
+        except Exception:
+            return None
+        for k in self.CONTEXT_KEYS:
+            v = info.get(k) or (info.get("top_provider") or {}).get(k)
+            if isinstance(v, (int, float)) and v > 0:
+                return int(v)
+        return None
 
 
 class ThinkFilter:

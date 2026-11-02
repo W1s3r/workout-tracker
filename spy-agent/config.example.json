@@ -18,11 +18,15 @@
   },
 
   "models": {
+    // Inkling-Small: 276B-total / 12B-active MoE, reasons by default, native tool calling,
+    // up to 1M-token context (your server decides the real limit).
     "inkling-small": {
       "provider": "work",
       "model": "<EXACT_MODEL_ID_FOR_INKLING_SMALL>",
-      "context_tokens": 32000,
-      "max_output_tokens": 4096,
+      "context_tokens": "auto",     // read from the server (vLLM max_model_len); or set a number
+      "context_fallback": 65536,    // used if the server doesn't report it
+      "context_cap": 262144,        // never work in more than 256K even if 1M is allowed (speed)
+      "max_output_tokens": 16384,   // reasoning tokens count against this - keep it generous
       "temperature": 0.2,
       "tool_mode": "auto",        // run `spy doctor` - it tells you native vs prompted
       "stream": true
@@ -30,8 +34,9 @@
     "gpt-oss": {
       "provider": "work",
       "model": "<EXACT_MODEL_ID_FOR_GPT_OSS>",
-      "context_tokens": 32000,
-      "max_output_tokens": 4096,
+      "context_tokens": "auto",
+      "context_fallback": 32768,
+      "max_output_tokens": 8192,
       "tool_mode": "auto",
       "stream": true
       // vLLM gpt-oss: you can raise reasoning effort with "extra_body": {"reasoning_effort": "high"}
@@ -39,7 +44,8 @@
     "gemini": {
       "provider": "work",
       "model": "<EXACT_MODEL_ID_FOR_GEMINI>",
-      "context_tokens": 128000,
+      "context_tokens": "auto",
+      "context_fallback": 128000,
       "max_output_tokens": 8192,
       "tool_mode": "auto",
       "stream": true

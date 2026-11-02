@@ -195,6 +195,14 @@ class TestLoop(unittest.TestCase):
         self.assertIn("respond in French", sysmsg)
         self.assertIn("BLUF", sysmsg)
 
+    def test_reasoning_exhausted_budget_is_retried_bigger(self):
+        a = self.make([{"content": "", "reasoning": "thinking " * 50, "finish_reason": "length"},
+                       {"content": "The answer is 42."}], stream=False)
+        out = a.run_turn("what is six times seven")
+        self.assertEqual(out, "The answer is 42.")
+        self.assertEqual(self.srv.requests[1]["max_tokens"], self.srv.requests[0]["max_tokens"] * 2)
+        self.assertEqual(a.last_turn.nudges, [])
+
     def test_truncated_reply_continues(self):
         a = self.make([{"content": "part one "}, {"content": "part two"}])
         # simulate finish_reason=length via the policy directly

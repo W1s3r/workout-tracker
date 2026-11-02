@@ -11,8 +11,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 class FakeLLMServer:
     """responder(body: dict) -> {"content": str, "tool_calls": [{"name", "arguments"}]}"""
 
-    def __init__(self, responder):
+    def __init__(self, responder, model_info=None):
         self.responder = responder
+        self.model_info = model_info or {"id": "fake-model"}
         self.requests = []
         outer = self
 
@@ -22,7 +23,7 @@ class FakeLLMServer:
 
             def do_GET(self):
                 if self.path.endswith("/models"):
-                    self._json({"data": [{"id": "fake-model"}]})
+                    self._json({"data": [outer.model_info]})
                 else:
                     self.send_error(404)
 
@@ -53,9 +54,11 @@ class FakeLLMServer:
                     self.wfile.write(b"data: [DONE]\n\n")
                     return
                 msg = {"role": "assistant", "content": r.get("content", "")}
+                if r.get("reasoning"):
+                    msg["reasoning_content"] = r["reasoning"]
                 if tcs:
                     msg["tool_calls"] = tcs
-                self._json({"choices": [{"index": 0, "message": msg, "finish_reason": "stop"}],
+                self._json({"choices": [{"index": 0, "message": msg, "finish_reason": r.get("finish_reason", "stop")}],
                             "usage": {"prompt_tokens": 10, "completion_tokens": 5}})
 
             def _sse(self, obj):

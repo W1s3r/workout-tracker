@@ -57,6 +57,15 @@ def run_doctor(config, model_name=None):
             _bad("placeholders not filled in (base_url=%s, model=%s)" % (pc.get("base_url"), prof.get("model")))
             continue
         client = make_client(prof)
+        if hasattr(client, "detect_context_length"):
+            det = client.detect_context_length()
+            if det:
+                _ok("server reports a context window of %d tokens%s" % (
+                    det, "" if client.context_tokens == det else " (Spy will use %d: context_cap)" % client.context_tokens))
+            else:
+                _note("server did not report a context window; Spy uses %d tokens (set \"context_tokens\" to the "
+                      "real value if you know it - ask whoever runs the server for vLLM's --max-model-len)"
+                      % client.context_tokens)
         if hasattr(client, "list_models"):
             try:
                 ms = client.list_models()
@@ -111,6 +120,10 @@ def run_doctor(config, model_name=None):
                     "tool result round-trip -> %r" % r2.content[:100])
             else:
                 _note("no native tool call returned (content: %r)" % r.content[:150])
+                if r.content and ("<|" in r.content or "tool" in r.content.lower()):
+                    _note("the model seems to emit tool calls as raw text: the server was probably started "
+                          "without a tool parser (for Inkling on vLLM: --enable-auto-tool-choice "
+                          "--tool-call-parser inkling --reasoning-parser inkling). Spy's prompted mode works meanwhile.")
         except LLMError as e:
             _note("native tools request rejected: %s" % str(e)[:200])
         # 4. prompted tools

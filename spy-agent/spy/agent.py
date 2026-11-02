@@ -197,6 +197,15 @@ class Agent:
                 try:
                     resp = self.llm.chat(msgs, tools=self.tool_schemas() if offer_tools else None,
                                          stream_cb=cb if stream_cb else None)
+                    if (resp.finish_reason == "length" and not (resp.content or "").strip()
+                            and not resp.tool_calls and resp.reasoning):
+                        # reasoning models (e.g. Inkling) can spend the whole budget thinking
+                        bigger = min(self.llm.max_output_tokens * 2,
+                                     max(self.llm.max_output_tokens, self.llm.context_tokens // 4))
+                        if not quiet:
+                            self.ui.info("  (reasoning used the whole output budget - retrying with %d tokens)" % bigger)
+                        resp = self.llm.chat(msgs, tools=self.tool_schemas() if offer_tools else None,
+                                             stream_cb=cb if stream_cb else None, max_tokens=bigger)
                 except LLMError as e:
                     self.ui.stop_thinking()
                     err = str(e).lower()

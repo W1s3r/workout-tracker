@@ -47,11 +47,18 @@ DEFAULTS: Dict[str, Any] = {
     #            "prompted"-> describe tools in the prompt, parse <tool_call> tags
     #            "auto"    -> native, but also parse tags if the model emits them
     "models": {
+        # Inkling-Small (Thinking Machines): 276B-total / 12B-active MoE, reasons by default,
+        # native tool calling. Architecture supports a 1M-token context; deployments usually cap it
+        # (hosted tiers are 64K / 256K). "auto" reads the real limit from the server (vLLM's
+        # max_model_len); 64K is used if the server doesn't report it. Reasoning tokens count
+        # against max_output_tokens, so it is set generously.
         "inkling-small": {
             "provider": "work",
             "model": "<MODEL_ID_FOR_INKLING_SMALL>",
-            "context_tokens": 32000,
-            "max_output_tokens": 4096,
+            "context_tokens": "auto",
+            "context_fallback": 65536,
+            "context_cap": 262144,      # work within 256K even if the server allows 1M (speed/quality)
+            "max_output_tokens": 16384,
             "temperature": 0.2,
             "tool_mode": "auto",
             "stream": True,
@@ -60,8 +67,9 @@ DEFAULTS: Dict[str, Any] = {
         "gpt-oss": {
             "provider": "work",
             "model": "<MODEL_ID_FOR_GPT_OSS>",
-            "context_tokens": 32000,
-            "max_output_tokens": 4096,
+            "context_tokens": "auto",
+            "context_fallback": 32768,
+            "max_output_tokens": 8192,
             "temperature": 0.2,
             "tool_mode": "auto",
             "stream": True,
@@ -70,7 +78,8 @@ DEFAULTS: Dict[str, Any] = {
         "gemini": {
             "provider": "work",
             "model": "<MODEL_ID_FOR_GEMINI>",
-            "context_tokens": 128000,
+            "context_tokens": "auto",
+            "context_fallback": 128000,
             "max_output_tokens": 8192,
             "temperature": 0.2,
             "tool_mode": "auto",

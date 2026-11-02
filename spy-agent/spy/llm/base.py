@@ -57,7 +57,11 @@ class LLMClient:
     def __init__(self, profile: Dict[str, Any]):
         self.profile = profile
         self.name = profile.get("name", profile.get("model", "?"))
-        self.context_tokens = int(profile.get("context_tokens", 32000))
+        ctx = profile.get("context_tokens", 32000)
+        # "auto": ask the server (vLLM reports max_model_len on /models); fall back if it can't say
+        self.context_auto = str(ctx).lower() == "auto"
+        self.context_tokens = int(profile.get("context_fallback", 65536)) if self.context_auto else int(ctx)
+        self.context_source = "fallback" if self.context_auto else "config"
         self.max_output_tokens = int(profile.get("max_output_tokens", 4096))
         self.tool_mode = profile.get("tool_mode", "auto")
         self.total_usage = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
@@ -91,6 +95,16 @@ class LLMClient:
 
     def _chat(self, messages, tools, stream_cb, temperature, max_tokens, json_mode) -> LLMResponse:
         raise NotImplementedError
+
+    def apply_context_limit(self, detected: Optional[int]) -> None:
+        """Use the server-reported context length, optionally capped by `context_cap` (a smaller
+        working window keeps local inference fast and leaves quality headroom)."""
+        if detected and detected > 0:
+            self.context_tokens = int(detected)
+            self.context_source = "server"
+        cap = self.profile.get("context_cap")
+        if cap:
+            self.context_tokens = min(self.context_tokens, int(cap))
 
     # Convenience for one-shot prompts used by research/compaction.
     def complete(self, prompt: str, system: str = "", max_tokens: Optional[int] = None,

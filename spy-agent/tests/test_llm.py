@@ -121,5 +121,24 @@ class TestOpenAIClient(unittest.TestCase):
             srv.close()
 
 
+class TestContextDetection(unittest.TestCase):
+    def _client(self, info, **prof):
+        srv = FakeLLMServer(lambda b: {"content": "x"}, model_info=info)
+        self.addCleanup(srv.close)
+        return OpenAICompatClient(profile(srv.url, context_tokens="auto", **prof))
+
+    def test_vllm_max_model_len(self):
+        c = self._client({"id": "fake-model", "max_model_len": 131072})
+        self.assertEqual((c.context_tokens, c.context_source), (131072, "server"))
+
+    def test_cap_and_fallback(self):
+        c = self._client({"id": "fake-model", "max_model_len": 1048576}, context_cap=262144)
+        self.assertEqual(c.context_tokens, 262144)
+        c = self._client({"id": "fake-model"}, context_fallback=65536)
+        self.assertEqual((c.context_tokens, c.context_source), (65536, "fallback"))
+        c = self._client({"id": "fake-model", "context_length": 32768})   # OpenRouter-style key
+        self.assertEqual(c.context_tokens, 32768)
+
+
 if __name__ == "__main__":
     unittest.main()

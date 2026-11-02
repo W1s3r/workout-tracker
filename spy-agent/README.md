@@ -157,7 +157,20 @@ Then it recommends the `tool_mode` and `stream` values to use.
 - If the gateway is **not** OpenAI-shaped, copy `spy/llm/custom_template.py`, fill in `build_request()`
   and `parse_response()`, and set the provider to `{"type": "custom", "module": "spy.llm.yourfile"}`.
 
-Set `context_tokens` honestly for each model. Compaction, tool-output truncation, and research batching all
+**Context window.** `"context_tokens": "auto"` (the default) reads the real limit from the server: vLLM
+reports `max_model_len` on `/models`. If the server doesn't report it, `context_fallback` is used.
+`spy doctor` and `/context` show which value is in effect. For **Inkling-Small**:
+
+- The model supports up to **1M tokens**. Hosted versions offer 64K and 256K tiers, but your deployment's
+  limit is whatever its server was started with.
+- Spy falls back to **64K** and, by default, works within **256K** at most (`context_cap`). Long local
+  prompts get slow, and Spy compacts long conversations anyway.
+- It **reasons by default**, and reasoning counts against `max_output_tokens`, so the default is a generous
+  16K. If reasoning still uses the whole budget, Spy retries once with double the budget.
+- If tool calls arrive as raw text, the vLLM server needs `--enable-auto-tool-choice --tool-call-parser
+  inkling --reasoning-parser inkling`. Until then, `"tool_mode": "prompted"` works.
+
+Otherwise, set `context_tokens` honestly for each model. Compaction, tool-output truncation, and research batching all
 size themselves from it. Use `roles` to choose which model does what. For example, `"fast": "gpt-oss"` sends
 search-result triage to a cheaper model.
 
