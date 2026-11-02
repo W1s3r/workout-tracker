@@ -1,0 +1,18 @@
+# Optional: `pip install --no-build-isolation --no-deps -e .` also creates a `spy` command
+# (in Anaconda's Scripts folder). Most people should just run:  python install.py
+[build-system]
+requires = ["setuptools>=40.8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spy-agent"
+version = "0.2.0"
+description = "Spy: a terminal coding and research agent for air-gapped networks"
+requires-python = ">=3.7"
+dependencies = []
+
+[project.scripts]
+spy = "spy.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["spy*"]

@@ -1,4 +1,0 @@
-#!/usr/bin/env sh
-# Launcher for Linux/macOS: symlink into ~/bin or add this folder to PATH.
-HSA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PYTHONPATH="$HSA_DIR${PYTHONPATH:+:$PYTHONPATH}" exec "${HSA_PYTHON:-python}" -m hsa "$@"
