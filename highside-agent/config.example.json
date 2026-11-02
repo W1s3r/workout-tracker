@@ -1,0 +1,142 @@
+{
+  // Copy to %USERPROFILE%\.hsa\config.json (Windows) or ~/.hsa/config.json and replace <PLACEHOLDERS>.
+  // Lines starting with // are comments (allowed in HSA config files only).
+  // Secrets can come from environment variables: "${ENV:HSA_API_KEY}" or "${ENV:NAME:default}".
+
+  "providers": {
+    "work": {
+      "type": "openai",
+      "base_url": "https://<LLM_HOST>/v1",
+      "api_key": "${ENV:HSA_API_KEY:<API_KEY>}",
+      // "auth_style": "bearer",          // or "api-key" / "x-api-key" depending on the gateway
+      // "headers": {"X-Extra": "value"},
+      "verify_ssl": true,
+      "ca_bundle": "<PATH_TO_INTERNAL_CA_BUNDLE.pem or null>",
+      "use_env_proxy": false,
+      "timeout": 300
+    }
+  },
+
+  "models": {
+    "inkling-small": {
+      "provider": "work",
+      "model": "<EXACT_MODEL_ID_FOR_INKLING_SMALL>",
+      "context_tokens": 32000,
+      "max_output_tokens": 4096,
+      "temperature": 0.2,
+      "tool_mode": "auto",        // run `python -m hsa doctor` - it tells you native vs prompted
+      "stream": true
+    },
+    "gpt-oss": {
+      "provider": "work",
+      "model": "<EXACT_MODEL_ID_FOR_GPT_OSS>",
+      "context_tokens": 32000,
+      "max_output_tokens": 4096,
+      "tool_mode": "auto",
+      "stream": true
+      // vLLM gpt-oss: you can raise reasoning effort with "extra_body": {"reasoning_effort": "high"}
+    },
+    "gemini": {
+      "provider": "work",
+      "model": "<EXACT_MODEL_ID_FOR_GEMINI>",
+      "context_tokens": 128000,
+      "max_output_tokens": 8192,
+      "tool_mode": "auto",
+      "stream": true
+    }
+  },
+
+  // main = the agent, fast = cheap triage/summaries, research = deep research reasoning
+  "roles": {"main": "inkling-small", "fast": "inkling-small", "research": "inkling-small"},
+
+  "permissions": {
+    "mode": "default",
+    "allow": ["shell(git status*)", "shell(git diff*)", "shell(git log*)", "shell(dir*)", "shell(ls*)"],
+    "deny": ["shell(git push --force*)", "shell(Remove-Item -Recurse*)", "shell(rd /s*)", "shell(rm -rf*)"]
+  },
+
+  // Named folders the agent knows about. UNC paths need doubled backslashes in JSON.
+  "locations": {
+    "team_share": "\\\\<FILESERVER>\\<SHARE>\\<TEAM_FOLDER>",
+    "home_drive": "H:\\",
+    "projects": "C:\\Users\\<YOU>\\projects"
+  },
+
+  "search": {
+    "sources": {
+      // --- Option A: scrape the search engine's normal results web page ---------------
+      "intranet": {
+        "enabled": true,
+        "type": "html",
+        "url": "https://<SEARCH_HOST>/search?q={query}&page={page}",
+        // Optional precision: a regex with named groups url/title/snippet over the raw HTML:
+        // "result_selector_regex": "<a class=\"result-title\" href=\"(?P<url>[^\"]+)\">(?P<title>.*?)</a>.*?<p class=\"snippet\">(?P<snippet>.*?)</p>",
+        // "include_url_regex": "/documents/|/wiki/",
+        // "exclude_url_regex": "/login|/help",
+        "max_pages": 2,
+        "verify_ssl": true,
+        "ca_bundle": null
+        // If the site needs Windows login (Kerberos/NTLM) or a smart card, route requests through PowerShell:
+        // "http_command": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\tools\\highside-agent\\scripts\\win_fetch.ps1 -Url {url} -Out {out}"
+        // Or paste a browser session cookie:  "cookie": "SESSION=..."
+      },
+
+      // --- Option B: a JSON search API ------------------------------------------------
+      "intranet_api": {
+        "enabled": false,
+        "type": "json",
+        "url": "https://<SEARCH_HOST>/api/search?q={query}&start={offset}&rows={count}",
+        "results_path": "results",
+        "fields": {"title": "title", "url": "url", "snippet": ["summary", "content"], "date": "modified"}
+      },
+
+      // --- Option C: Elasticsearch / Solr / SharePoint back ends -------------------------
+      "es": {"enabled": false, "type": "elasticsearch", "url": "https://<ES_HOST>:9200/<INDEX>",
+             "fields_searched": ["title^3", "content"], "fields": {"title": "title", "url": "url", "snippet": "content"}},
+      "solr": {"enabled": false, "type": "solr", "url": "https://<SOLR_HOST>/solr/<CORE>"},
+      "sharepoint": {"enabled": false, "type": "sharepoint", "url": "https://<SHAREPOINT_SITE>",
+                     "http_command": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\tools\\highside-agent\\scripts\\win_fetch.ps1 -Url {url} -Out {out}"},
+
+      // --- Option D: anything else - your own script that prints JSON results -------------
+      "custom_script": {"enabled": false, "type": "command",
+                        "command": "python C:\\tools\\my_search.py {query}"},
+
+      // --- The local index of network drives (build with: python -m hsa index team_share) -
+      "shares": {"enabled": false, "type": "local_index"}
+    },
+    "fetch": {"timeout": 30, "verify_ssl": true, "ca_bundle": null
+              // , "http_command": "powershell ... win_fetch.ps1 -Url {url} -Out {out}"
+    },
+    "cache_days": 7
+  },
+
+  "research": {
+    "max_rounds": 3,
+    "queries_per_round": 8,
+    "pages_to_read_per_round": 8,
+    // Acronyms/jargon help query expansion a LOT on keyword search engines:
+    "glossary": {
+      "<ACRONYM>": "<expansion>"
+    }
+  },
+
+  "gitlab": {
+    "url": "https://<GITLAB_HOST>",
+    "token": "${ENV:HSA_GITLAB_TOKEN:<GITLAB_PERSONAL_ACCESS_TOKEN>}",
+    "verify_ssl": true,
+    "ca_bundle": null
+  },
+
+  "shell": {
+    // null = auto (PowerShell on Windows). Or e.g. "C:\\Program Files\\Git\\bin\\bash.exe"
+    "program": null,
+    "default_timeout": 120
+  },
+
+  "hooks": {
+    // Example: auto-format Python after every edit (needs black in your Anaconda):
+    // "post_tool": [{"match": "write_file|edit_file", "command": "python -m black -q ."}]
+    "pre_tool": [],
+    "post_tool": []
+  }
+}

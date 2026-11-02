@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.hsa/config.local.json
+.hsa/AGENT.local.md
+research/
