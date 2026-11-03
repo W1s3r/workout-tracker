@@ -11,7 +11,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from spy import net
-from spy.llm.base import LLMClient, LLMError, LLMResponse, ToolCall, parse_json_loose
+from spy.llm.base import LLMClient, LLMError, LLMResponse, ToolCall, content_with_images, parse_json_loose
 
 THINK_RE = re.compile(r"<think(?:ing)?>(.*?)</think(?:ing)?>", re.S)
 
@@ -45,11 +45,12 @@ class OpenAICompatClient(LLMClient):
                 h["x-api-key"] = key
         return h
 
-    @staticmethod
-    def _clean_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _clean_messages(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         out = []
         for m in messages:
             mm = {k: v for k, v in m.items() if not k.startswith("_")}
+            if m.get("_images") and self.supports_vision:
+                mm["content"] = content_with_images(mm.get("content") or "", m["_images"], self.image_max_px)
             if mm.get("content") is None:
                 mm["content"] = ""
             if mm["role"] == "assistant" and not mm.get("tool_calls"):

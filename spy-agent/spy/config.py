@@ -59,6 +59,8 @@ DEFAULTS: Dict[str, Any] = {
             "context_fallback": 65536,
             "context_cap": 262144,      # work within 256K even if the server allows 1M (speed/quality)
             "max_output_tokens": 16384,
+            "vision": True,             # accepts image input (pasted screenshots, read_file on images)
+            "audio": True,              # accepts audio input (used for /voice transcription)
             "temperature": 0.2,
             "tool_mode": "auto",
             "stream": True,
@@ -67,6 +69,7 @@ DEFAULTS: Dict[str, Any] = {
         "gpt-oss": {
             "provider": "work",
             "model": "<MODEL_ID_FOR_GPT_OSS>",
+            "vision": False,            # text-only model
             "context_tokens": "auto",
             "context_fallback": 32768,
             "max_output_tokens": 8192,
@@ -78,6 +81,7 @@ DEFAULTS: Dict[str, Any] = {
         "gemini": {
             "provider": "work",
             "model": "<MODEL_ID_FOR_GEMINI>",
+            "vision": True,
             "context_tokens": "auto",
             "context_fallback": 128000,
             "max_output_tokens": 8192,
@@ -91,7 +95,8 @@ DEFAULTS: Dict[str, Any] = {
     },
     # Which model is used for which job. "fast" is used for cheap sub-tasks
     # (search-result triage, summarising fetched pages). Can be the same model.
-    "roles": {"main": "inkling-small", "fast": "inkling-small", "research": "inkling-small"},
+    "roles": {"main": "inkling-small", "fast": "inkling-small", "research": "inkling-small",
+              "voice": "inkling-small"},
 
     # ---- Agent behaviour -----------------------------------------------------
     "agent": {
@@ -174,6 +179,22 @@ DEFAULTS: Dict[str, Any] = {
                        ".html", ".htm", ".py", ".ps1", ".sh", ".sql", ".yaml",
                        ".yml", ".ini", ".cfg", ".docx", ".pptx", ".xlsx", ".pdf"],
         "max_file_mb": 25,
+    },
+    # ---- Images (Alt+V / /paste to paste a screenshot, @image.png, read_file on images) ----
+    "images": {"max_px": 1568, "keep_last": 4},
+    # ---- Voice input (/voice) - see spy/voice.py ----
+    "voice": {
+        "engine": "llm",            # llm (model with audio input, e.g. Inkling) | transcriptions | command
+        "model_role": "voice",      # which model/role transcribes for engine "llm"
+        "audio_part": "input_audio",  # input_audio | audio_url  (`spy doctor` tells you which works)
+        "url": "https://<TRANSCRIBE_HOST>/v1/audio/transcriptions",  # engine "transcriptions"
+        "model": "whisper-1",
+        "api_key": "${ENV:SPY_API_KEY:}",
+        "language": None,
+        "command": None,            # engine "command": e.g. "python my_stt.py {wav}"
+        "record_command": None,     # override recording, e.g. ffmpeg ... {out}
+        "max_seconds": 120,
+        "sample_rate": 16000,
     },
     # ---- Internal web access (see spy/webaccess.py, `spy webtest URL`) ----
     "web": {

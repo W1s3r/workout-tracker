@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from spy.extract import TEXT_EXTS, decode_text, extract_any, looks_binary
+from spy.images import IMAGE_EXTS
+from spy.images import describe as describe_image
 from spy.tools import edit_safety
 from spy.tools.base import SKIP_DIRS, Tool, ToolContext, ToolError, truncate
 
@@ -21,7 +23,8 @@ DOC_EXTS = {".docx", ".pptx", ".xlsx", ".xlsm", ".pdf", ".ipynb"}
 class ReadFile(Tool):
     name = "read_file"
     description = """Read a file and return its contents with line numbers (cat -n style).
-Also extracts text from .docx, .pptx, .xlsx, .pdf, .ipynb and .html files. Works on
+Also extracts text from .docx, .pptx, .xlsx, .pdf, .ipynb and .html files, and SHOWS YOU image files
+(.png .jpg .gif .webp .bmp - screenshots, charts, diagrams). Works on
 local paths, mapped drives (H:\\...) and UNC network paths (\\\\server\\share\\...).
 For large files, use offset/limit to read a section. You must read a file before editing it."""
     parameters = {"type": "object", "properties": {
@@ -39,8 +42,14 @@ For large files, use offset/limit to read a section. You must read a file before
         size = path.stat().st_size
         if size > 50 * 1024 * 1024:
             raise ToolError("File is %.1f MB - too large. Use grep or read with a script." % (size / 1e6))
-        data = path.read_bytes()
         ext = path.suffix.lower()
+        if ext in IMAGE_EXTS:
+            llm = getattr(ctx.agent, "llm", None)
+            if llm is not None and getattr(llm, "supports_vision", False):
+                ctx.pending_images.append(str(path))
+                return "Image %s - attached below so you can see it." % describe_image(path)
+            return "[Image file %s. The current model cannot view images.]" % describe_image(path)
+        data = path.read_bytes()
         if ext in DOC_EXTS or ext in (".html", ".htm"):
             _, text, _ = extract_any(data, path.name)
         elif looks_binary(data):

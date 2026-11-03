@@ -11,6 +11,7 @@
   spy webtest URL [--query Q]  find a way to reach internal web pages / search
   spy browser [URL]         open a browser Spy can drive; log in there once
   spy evalloop              measure how well the model drives the agent loop
+  spy voicetest             record from the microphone and show the transcript
 """
 from __future__ import annotations
 
@@ -27,6 +28,8 @@ from spy.config import load_config, write_starter_config
 from spy.context import add_note, context_files, ensure_memory_file, memory_path
 from spy.llm import make_client
 from spy.permissions import MODES, Permissions
+from spy.images import describe as describe_image
+from spy.images import is_image_path
 from spy.session import Session
 from spy.ui import UI
 
@@ -55,10 +58,13 @@ HELP = """Commands:
   /last                    how the last turn ran (steps, auto-continues, why it ended)
   /web <url>               test which internal-web access methods work for a URL
   /undo                    revert Spy's last file change (repeat to go further back)
+  /paste                   attach the screenshot on the clipboard (Alt+V in the input box)
+  /voice [on|off|test]     speak a message; it is transcribed into the input box for review
   /changes                 list the files Spy changed this session
 Shortcuts:
   # note                   save a note to the project SPY.md   (#g note -> master ~/.spy/SPY.md)
-  @path                    attach a file (or folder listing) to your message - Tab completes paths
+  @path                    attach a file, folder listing, or image to your message - Tab completes paths
+  Alt+V (or Ctrl+V)        paste a screenshot from the clipboard; it appears as [Image #1]
   Shift+Tab                cycle mode: default -> accept edits -> plan
   !command                 run a shell command yourself; output is shared with the agent
   \\ at end of line        continue input on next line;  \"\"\" on its own line starts/ends a block
@@ -78,7 +84,9 @@ COMMANDS = {
     "sessions": "list this project's saved sessions", "resume": "resume a saved session",
     "doctor": "test API, search and drives", "style": "response style / language / format",
     "last": "how the last turn ran", "web": "test internal-web access for a URL",
-    "undo": "revert Spy's last file change", "changes": "files Spy changed this session",
+    "undo": "revert Spy's last file change",
+    "paste": "attach the screenshot on the clipboard (same as Alt+V)",
+    "voice": "speak a message (/voice on: Enter on empty box talks; /voice test)", "changes": "files Spy changed this session",
 }
 
 INIT_PROMPT = """Analyse this project and create (or improve) an SPY.md file in the project root that will be
@@ -127,12 +135,16 @@ class App:
                            llm_factory=self.client)
         self.session = Session(self.pdata)
         self.agent.on_change = lambda: self._save()
+        self.pasted_images: Dict[int, str] = {}
+        self.image_counter = 0
+        self._mention_images: List[str] = []
+        self.voice_mode = False
         from spy.tui import TerminalInput
         cmds_desc = dict(COMMANDS)
         cmds_desc.update({c: "custom command (%s)" % p.name for c, p in self.custom_cmds.items()})
         self.input = TerminalInput(self.pdata / "input_history", cmds_desc, lambda: self.agent.ctx.cwd,
                                    self._status, lambda: self.permissions.mode, self._set_mode,
-                                   color=self.ui.color)
+                                   color=self.ui.color, on_paste=self.paste_from_clipboard)
 
     # ------------------------------------------------------------------
     def client(self, name_or_role: str):
@@ -162,7 +174,12 @@ class App:
             pct = 100.0 * self.agent.context_usage() / self.agent.llm.context_tokens
         except Exception:
             pct = 0
-        return "%s · ctx %d%%" % (self.agent.llm.name, pct)
+        extra = ""
+        if self.pasted_images:
+            extra += " · 📎 %d image%s" % (len(self.pasted_images), "s" if len(self.pasted_images) > 1 else "")
+        if self.voice_mode:
+            extra += " · 🎤 voice: Enter on empty box to talk"
+        return "%s · ctx %d%%%s" % (self.agent.llm.name, pct, extra)
 
     def _set_mode(self, mode: str):
         self.permissions.mode = mode
@@ -195,6 +212,8 @@ class App:
             except KeyboardInterrupt:
                 continue
             if not line.strip():
+                if self.voice_mode:
+                    self.voice_input()
                 continue
             if self.input.fancy:
                 self.echo_user(line)        # the input box erased itself - show the message
@@ -223,7 +242,10 @@ class App:
         for m in _re.finditer(r"(?<![\w@])@(\"[^\"]+\"|[^\s]+)", line):
             raw = m.group(1).strip('"')
             p = self.agent.ctx.resolve(raw)
-            if p.is_file():
+            if p.is_file() and is_image_path(p):
+                self._mention_images.append(str(p))
+                self.ui.info("  ⎿ attached image %s" % describe_image(p))
+            elif p.is_file():
                 tool = self.agent.tools["read_file"]
                 try:
                     body = tool.run({"path": str(p), "limit": 2000}, self.agent.ctx)
@@ -238,6 +260,46 @@ class App:
         if attached:
             line += "\n\n" + "\n\n".join(attached)
         return line
+
+    def prepare_message(self, line: str):
+        """Returns (text, image paths): @mentions expanded, [Image #n] tokens from pastes resolved,
+        and dragged-in image file paths picked up."""
+        import re as _re
+        self._mention_images = []
+        text = self.expand_mentions(line)
+        images = []
+        for m in _re.finditer(r"\[Image #(\d+)\]", line):
+            p = self.pasted_images.get(int(m.group(1)))
+            if p and p not in images:
+                images.append(p)
+        if not self.input.fancy:   # plain mode: /paste attaches to the next message without a token
+            images += [p for p in self.pasted_images.values() if p not in images]
+        # paths dropped/pasted into the terminal: "C:\shots\a.png", /home/x/a.png
+        for m in _re.finditer(r"\"([^\"]+)\"|(?<!\S)((?:[A-Za-z]:\\|\\\\|/|~)[^\s\"]+)", line):
+            cand = (m.group(1) or m.group(2) or "").strip()
+            if cand and is_image_path(cand):
+                p = self.agent.ctx.resolve(cand)
+                if p.is_file() and str(p) not in images:
+                    images.append(str(p))
+                    self.ui.info("  ⎿ attached image %s" % describe_image(p))
+        images += [p for p in self._mention_images if p not in images]
+        self.pasted_images.clear()
+        return text, images
+
+    def paste_from_clipboard(self):
+        """Alt+V / /paste: returns ([labels], clipboard_text)."""
+        from spy.images import grab_clipboard
+        try:
+            paths, text = grab_clipboard(self.config.home / "images")
+        except Exception as e:
+            self.ui.warn("Could not read the clipboard: %s" % e)
+            return [], None
+        labels = []
+        for p in paths:
+            self.image_counter += 1
+            self.pasted_images[self.image_counter] = str(p)
+            labels.append("[Image #%d]" % self.image_counter)
+        return labels, text
 
     def handle(self, line: str):
         s = line.strip()
@@ -254,7 +316,8 @@ class App:
         # "/cmd args" is a command; "/usr/local/file.txt is broken" (an absolute path) is a message
         if s.startswith("/") and "/" not in s.split()[0][1:]:
             return self.slash(s)
-        self.agent.run_turn(self.expand_mentions(line))
+        text, images = self.prepare_message(line)
+        self.agent.run_turn(text, images=images or None)
         return True
 
     def bang(self, cmd: str):
@@ -374,6 +437,21 @@ class App:
             run_doctor(self.config, a.llm.name)
         elif cmd == "style":
             self.style_cmd(arg)
+        elif cmd == "paste":
+            labels, _ = self.paste_from_clipboard()
+            if labels:
+                self.ui.info("Attached %s - it will be sent with your next message." % " ".join(labels))
+            else:
+                self.ui.warn("No image on the clipboard. Copy a screenshot first (Windows: Win+Shift+S).")
+        elif cmd == "voice":
+            if arg in ("on", "off"):
+                self.voice_mode = arg == "on"
+                self.ui.info("Voice mode %s.%s" % (arg, " Press Enter on an empty input box to start talking."
+                                                   if self.voice_mode else ""))
+            elif arg == "test":
+                self.voice_input(test=True)
+            else:
+                self.voice_input()
         elif cmd == "undo":
             self.ui.info(a.ctx.history.undo())
         elif cmd == "changes":
@@ -428,6 +506,43 @@ class App:
             self.ui.info("Using style '%s' (this session; /style save to keep)" % key)
         else:
             self.ui.error("Unknown style or setting '%s'. Try /style to list options." % key)
+
+    def voice_input(self, test: bool = False):
+        """Record, transcribe, and put the transcript in the input box to review before sending."""
+        import time as _t
+        from spy import voice
+        vcfg = dict(self.config.get("voice") or {})
+        self.ui.info("● Recording... press Enter to stop (Ctrl+C cancels, max %ss)" % vcfg.get("max_seconds", 120))
+
+        def tick(sec):
+            if sys.stdout.isatty():
+                sys.stdout.write("\r  ● %0.0fs " % sec)
+                sys.stdout.flush()
+        try:
+            wav = voice.record(vcfg, self.config.home / "audio", voice.StdinStopper(), tick)
+        except KeyboardInterrupt:
+            self.ui.warn("\nRecording cancelled.")
+            return
+        except voice.VoiceError as e:
+            self.ui.error(str(e))
+            return
+        if sys.stdout.isatty():
+            sys.stdout.write("\r")
+        self.ui.info("Transcribing %.1fs of audio (%s)..." % (voice.wav_seconds(wav), vcfg.get("engine", "llm")))
+        t0 = _t.time()
+        try:
+            text = voice.transcribe(wav, vcfg, self.client)
+        except Exception as e:
+            self.ui.error("Transcription failed: %s" % e)
+            self.ui.info("Audio kept at %s. See README 'Voice input' to configure transcription." % wav)
+            return
+        if test:
+            self.ui.info("Transcript (%.1fs): %s" % (_t.time() - t0, text or "(empty)"))
+            return
+        if not text.strip():
+            self.ui.warn("No speech recognised.")
+            return
+        self.input.prefill = text.strip()
 
     def resume(self, sid: Optional[str]):
         recent = Session.list_recent(self.pdata, 30)
@@ -535,6 +650,12 @@ def main(argv: Optional[List[str]] = None):
         print("2. Keep the window open (minimize it). Spy loads pages in background tabs.")
         print("3. Test with:  spy webtest <url> --methods cdp")
         print("Logins usually persist in this profile, so next time a hidden copy can start automatically.")
+        return
+    if sub == "voicetest":
+        ap.add_argument("cmd")
+        args = ap.parse_args(argv)
+        app = App(args)
+        app.voice_input(test=True)
         return
     if sub == "evalloop":
         ap.add_argument("cmd")

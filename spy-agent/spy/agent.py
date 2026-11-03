@@ -161,15 +161,26 @@ class Agent:
         return [t.schema() for t in self.tools.values()]
 
     # ----------------------------------------------------------- the loop --
-    def run_turn(self, user_text: str, quiet: bool = False) -> str:
+    def run_turn(self, user_text: str, quiet: bool = False, images: Optional[List[str]] = None) -> str:
         """Run one user turn: call the model, execute tools, and keep going until
-        the task is done, the model is blocked/asking the user, or a limit hits."""
+        the task is done, the model is blocked/asking the user, or a limit hits.
+        images: image file paths attached to the message (pasted screenshots, @image.png)."""
         prev_text = next((m.get("content") or "" for m in reversed(self.messages)
                           if m["role"] == "assistant" and (m.get("content") or "").strip()), "")
         prev_engaged = bool(self.last_turn and self.last_turn.engaged)
-        self.messages.append({"role": "user", "content": user_text})
+        umsg: Dict[str, Any] = {"role": "user", "content": user_text}
+        if images:
+            if getattr(self.llm, "supports_vision", False):
+                umsg["_images"] = [str(p) for p in images]
+            else:
+                self.ui.warn("The current model (%s) can't view images - sending text only. Switch with /model."
+                             % self.llm.name)
+                umsg["content"] += "\n[The user attached %d image(s), but this model cannot view images.]" % len(images)
+        self.messages.append(umsg)
         self._git_info_cache = None
         st = TurnState(route=route(user_text, prev_text, prev_engaged) if self.loop_cfg.get("router", True) else "auto")
+        if images and st.route == "chat":
+            st.route = "auto"  # "what's this?" + screenshot is not small talk
         self.last_turn = st
         final = ""
         seen_calls: Dict[str, int] = {}
@@ -182,7 +193,7 @@ class Agent:
                     break
                 st.steps += 1
                 self.maybe_compact()
-                msgs = [{"role": "system", "content": self.system_prompt()}] + self.messages
+                msgs = [{"role": "system", "content": self.system_prompt()}] + self._image_window(self.messages)
                 offer_tools = not (st.route == CHAT and not st.engaged)
                 if not offer_tools:
                     msgs[-1] = dict(msgs[-1], content=msgs[-1]["content"] + "\n\n" + CHAT_NOTE)
@@ -258,6 +269,12 @@ class Agent:
                     if st.consecutive_errors >= int(self.loop_cfg.get("stuck_after_errors", 4)):
                         result += STUCK_NOTE.format(n=st.consecutive_errors)
                     self.messages.append({"role": "tool", "tool_call_id": tc.id, "name": tc.name, "content": result})
+                if self.ctx.pending_images:
+                    # images a tool loaded (read_file on a screenshot) go to the model as a user message
+                    imgs, self.ctx.pending_images = list(self.ctx.pending_images), []
+                    self.messages.append({"role": "user", "_images": imgs, "_auto": True,
+                                          "content": "[Image(s) loaded by read_file: %s]" % ", ".join(
+                                              os.path.basename(p) for p in imgs)})
                 if finish_call is not None:
                     summary = clean_response(str(finish_call.arguments.get("summary") or ""))
                     st.finish_status = finish_call.arguments.get("status") or "done"
@@ -281,6 +298,21 @@ class Agent:
         if self.on_change:
             self.on_change()
         return final
+
+    def _image_window(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Only the most recent images are re-sent each request (they are expensive); older ones
+        are replaced by a short note."""
+        keep = int((self.config.get("images") or {}).get("keep_last", 4))
+        out, seen = [], 0
+        for m in reversed(messages):
+            if m.get("_images"):
+                n = len(m["_images"])
+                if seen + n > keep:
+                    m = {k: v for k, v in m.items() if k != "_images"}
+                    m["content"] = (m.get("content") or "") + "\n[earlier image(s) omitted to save context]"
+                seen += n
+            out.append(m)
+        return list(reversed(out))
 
     def _step_limit_summary(self, quiet: bool) -> str:
         """Out of steps: ask the model (without tools) for a status report."""

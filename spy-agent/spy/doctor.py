@@ -29,6 +29,57 @@ def _note(msg):
     print("  [info] " + msg)
 
 
+def _test_png() -> bytes:
+    from spy.images import png_encode
+    return png_encode(48, 48, [b"\xdc\x14\x14" * 48] * 48)  # solid red
+
+
+def _test_wav() -> bytes:
+    import io
+    import math
+    import struct
+    import wave
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"".join(struct.pack("<h", int(8000 * math.sin(2 * math.pi * 440 * i / 16000)))
+                               for i in range(16000)))
+    return buf.getvalue()
+
+
+def check_media(client, prof, config):
+    """Does the model accept images / audio in this deployment?"""
+    import base64
+    url = "data:image/png;base64," + base64.b64encode(_test_png()).decode()
+    try:
+        r = client.chat([{"role": "user", "content": [
+            {"type": "text", "text": "What single color fills this image? Answer with one word."},
+            {"type": "image_url", "image_url": {"url": url}}]}], max_tokens=2000, temperature=0)
+        ok = "red" in (r.content or "").lower()
+        (_ok if ok else _note)("image input %s -> %r%s" % ("works" if ok else "accepted, but answer unexpected",
+                                                          (r.content or "")[:60],
+                                                          "" if prof.get("vision", True) else
+                                                          "  (set \"vision\": true for this model)"))
+    except LLMError as e:
+        _note("image input rejected (%s) -> set \"vision\": false for this model" % str(e)[:150])
+    if not prof.get("audio", False) and config.get("roles", {}).get("voice") != prof.get("name"):
+        return
+    b64 = base64.b64encode(_test_wav()).decode()
+    for style, part in (("input_audio", {"type": "input_audio", "input_audio": {"data": b64, "format": "wav"}}),
+                        ("audio_url", {"type": "audio_url", "audio_url": {"url": "data:audio/wav;base64," + b64}})):
+        try:
+            r = client.chat([{"role": "user", "content": [
+                {"type": "text", "text": "Describe this audio in a few words."}, part]}], max_tokens=2000, temperature=0)
+            _ok("audio input works as %s -> %r   (for /voice: \"voice\": {\"engine\": \"llm\", \"audio_part\": \"%s\"})"
+                % (style, (r.content or "")[:60], style))
+            return
+        except LLMError as e:
+            _note("audio as %s rejected: %s" % (style, str(e)[:120]))
+    _note("audio input not accepted by this deployment -> for /voice use engine \"transcriptions\" or \"command\"")
+
+
 def run_doctor(config, model_name=None):
     print("Spy doctor")
     print("=" * 60)
@@ -138,6 +189,8 @@ def run_doctor(config, model_name=None):
         except LLMError as e:
             _bad("prompted mode failed: %s" % e)
         print("  => recommended \"tool_mode\": %s" % ('"auto" (native works)' if native_ok else '"prompted"'))
+        client.tool_mode = prof.get("tool_mode", "auto")
+        check_media(client, prof, config)
 
     print("\nSearch sources")
     from spy.research.sources import build_sources

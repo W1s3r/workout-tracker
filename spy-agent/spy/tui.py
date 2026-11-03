@@ -6,6 +6,7 @@ menu with descriptions, @file completion, history, and key bindings:
 
   Enter            send                    Alt+Enter / Ctrl+J   new line
   Shift+Tab        cycle mode: default -> accept edits -> plan
+  Alt+V / Ctrl+V   paste a screenshot from the clipboard (shows as [Image #1])
   Up / Down        history                 Tab                  complete
   Ctrl+C           clear input (twice on an empty box to exit)    Ctrl+D  exit
 
@@ -75,7 +76,7 @@ if HAVE_PTK:
 class TerminalInput:
     def __init__(self, history_path: Optional[Path], commands: Dict[str, str], cwd_fn: Callable[[], Path],
                  status_fn: Callable[[], str], get_mode: Callable[[], str], set_mode: Callable[[str], None],
-                 color: bool = True):
+                 color: bool = True, on_paste: Optional[Callable[[], tuple]] = None):
         self.commands = commands
         self.cwd_fn = cwd_fn
         self.status_fn = status_fn
@@ -83,6 +84,8 @@ class TerminalInput:
         self.set_mode = set_mode
         self.color = color
         self.history_path = history_path
+        self.on_paste = on_paste      # () -> (list of labels like "[Image #1]", clipboard text or None)
+        self.prefill = ""             # text to start the next input with (e.g. a voice transcript)
         self._last_ctrl_c = 0.0
         self._hint = ""
         self.fancy = HAVE_PTK and sys.stdin.isatty() and sys.stdout.isatty() and os.environ.get("SPY_PLAIN") is None
@@ -97,12 +100,23 @@ class TerminalInput:
     def status_text(self) -> str:
         mode = self.get_mode()
         label = MODE_LABEL.get(mode, mode)
-        left = (label + " (shift+tab to cycle)") if label else "? /help · shift+tab: modes · @file to attach"
+        left = (label + " (shift+tab to cycle)") if label else "? /help · shift+tab: modes · alt+v: paste image"
         return "  %s   %s" % (left, self.status_fn())
 
     # -------------------------------------------------------------- read --
     def read(self) -> str:
+        prefill, self.prefill = self.prefill, ""
+        if prefill and not self.fancy:
+            sys.stdout.write("\n" + self._c("Transcript: ", "\033[1m") + prefill + "\n")
+            sys.stdout.write(self._c("Enter = send it · type a replacement · n = discard: ", "\033[90m"))
+            sys.stdout.flush()
+            ans = sys.stdin.readline()
+            if not ans:
+                raise EOFError
+            ans = ans.rstrip("\n")
+            return prefill if ans.strip() == "" else ("" if ans.strip().lower() == "n" else ans)
         if self.fancy:
+            self._prefill_now = prefill
             try:
                 return self._read_fancy()
             except (EOFError, KeyboardInterrupt):
@@ -118,6 +132,28 @@ class TerminalInput:
         ta = TextArea(multiline=True, prompt=FormattedText([("class:prompt", "> ")]), history=self._history,
                       completer=SpyCompleter(self.commands, self.cwd_fn), complete_while_typing=True,
                       wrap_lines=True, height=Dimension(min=1, max=15), focus_on_click=True)
+        pre = getattr(self, "_prefill_now", "")
+        if pre:
+            ta.buffer.insert_text(pre)
+
+        def paste(event):
+            """Alt+V / Ctrl+V: attach a clipboard image (screenshot) or paste clipboard text."""
+            if not self.on_paste:
+                return
+            labels, text = self.on_paste()
+            buf = event.current_buffer
+            if labels:
+                lead = "" if (not buf.text or buf.text.endswith(" ")) else " "
+                buf.insert_text(lead + " ".join(labels) + " ")
+                self._hint = ""
+            elif text:
+                buf.insert_text(text.replace("\r\n", "\n"))
+            else:
+                self._hint = "Clipboard has no image (copy a screenshot first: Win+Shift+S)"
+            event.app.invalidate()
+
+        kb.add("escape", "v")(paste)
+        kb.add("c-v")(paste)
 
         def submit(event):
             text = ta.text

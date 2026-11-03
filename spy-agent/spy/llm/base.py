@@ -64,6 +64,8 @@ class LLMClient:
         self.context_source = "fallback" if self.context_auto else "config"
         self.max_output_tokens = int(profile.get("max_output_tokens", 4096))
         self.tool_mode = profile.get("tool_mode", "auto")
+        self.supports_vision = bool(profile.get("vision", True))
+        self.image_max_px = int(profile.get("image_max_px", 1568))
         self.total_usage = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
 
     def chat(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None,
@@ -321,12 +323,27 @@ def to_prompted_messages(messages: List[Dict[str, Any]], tools: List[Dict[str, A
             else:
                 out.append({"role": "user", "content": block, "_tool_results": True})
         else:
-            out.append({"role": role, "content": m.get("content") or ""})
+            mm = {"role": role, "content": m.get("content") or ""}
+            if m.get("_images"):
+                mm["_images"] = m["_images"]
+            out.append(mm)
     if not sys_done:
         out.insert(0, {"role": "system", "content": tool_text})
     for m in out:
         m.pop("_tool_results", None)
     return out
+
+
+def content_with_images(text: str, images, max_px: int = 1568):
+    """OpenAI-style multimodal content: text part + one image_url part per image file."""
+    from spy.images import image_data_url
+    parts = [{"type": "text", "text": text or ""}]
+    for p in images or []:
+        try:
+            parts.append({"type": "image_url", "image_url": {"url": image_data_url(p, max_px)}})
+        except OSError:
+            parts[0]["text"] += "\n[image %s could not be read]" % p
+    return parts
 
 
 def _safe_args(a):
@@ -348,8 +365,13 @@ def estimate_tokens(obj: Any) -> int:
         n = 4
         for k in ("content", "reasoning"):
             if obj.get(k):
-                n += estimate_tokens(obj[k] if isinstance(obj[k], str) else json.dumps(obj[k]))
+                v = obj[k]
+                if isinstance(v, list):  # multimodal parts: count text, flat cost for media
+                    v = " ".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in v)
+                    n += 1500 * sum(1 for p in obj[k] if isinstance(p, dict) and p.get("type") != "text")
+                n += estimate_tokens(v if isinstance(v, str) else json.dumps(v))
         if obj.get("tool_calls"):
             n += estimate_tokens(json.dumps(obj["tool_calls"]))
+        n += 1500 * len(obj.get("_images") or [])
         return n
     return 1

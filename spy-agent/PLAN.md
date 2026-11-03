@@ -57,7 +57,9 @@
 | MCP servers | — | Roadmap: a stdio JSON-RPC client is feasible with the stdlib |
 | NotebookEdit | reads `.ipynb` only | Roadmap |
 | Skills (packaged instructions + scripts) | custom commands cover most uses | Roadmap |
-| Images / vision, IDE integration | — | Depends on the model and API |
+| Image paste / vision | Alt+V clipboard paste, `@image`, dragged paths, `read_file` on images | ✅ |
+| `/voice` dictation | `/voice` (Windows built-in recorder; model, Whisper-style API, or script transcription) | ✅ |
+| IDE integration | — | Not planned (terminal-first) |
 
 ## The agent loop (how a turn ends)
 

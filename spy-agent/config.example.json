@@ -27,6 +27,8 @@
       "context_fallback": 65536,    // used if the server doesn't report it
       "context_cap": 262144,        // never work in more than 256K even if 1M is allowed (speed)
       "max_output_tokens": 16384,   // reasoning tokens count against this - keep it generous
+      "vision": true,               // can see images (pasted screenshots, read_file on .png/.jpg)
+      "audio": true,                // can hear audio (used by /voice with engine "llm")
       "temperature": 0.2,
       "tool_mode": "auto",        // run `spy doctor` - it tells you native vs prompted
       "stream": true
@@ -34,6 +36,7 @@
     "gpt-oss": {
       "provider": "work",
       "model": "<EXACT_MODEL_ID_FOR_GPT_OSS>",
+      "vision": false,              // text-only
       "context_tokens": "auto",
       "context_fallback": 32768,
       "max_output_tokens": 8192,
@@ -72,6 +75,18 @@
     "format": "markdown",          // markdown | plain (for pasting into email/Word)
     "tone": "",                    // e.g. "professional, direct"
     "custom": ""                   // any extra standing instruction
+  },
+
+  // Screenshots: Alt+V (or /paste) in the input box, @image.png, or drag a file into the terminal.
+  "images": {"max_px": 1568, "keep_last": 4},   // downscale (needs Pillow) / how many recent images are re-sent
+
+  // Voice input: /voice (or /voice on, then Enter on an empty box). `spy voicetest` to try it.
+  "voice": {
+    "engine": "llm",               // llm: the model transcribes (Inkling hears audio) | transcriptions | command
+    "audio_part": "input_audio",   // or "audio_url" - `spy doctor` reports which one your server accepts
+    "url": "https://<TRANSCRIBE_HOST>/v1/audio/transcriptions",  // engine "transcriptions" (e.g. Spyglass's backend)
+    "model": "whisper-1",
+    "max_seconds": 120
   },
 
   // How Spy reaches internal web pages. Run: spy webtest "https://<SEARCH_HOST>/search?q={query}" --query test

@@ -29,7 +29,12 @@ class FakeLLMServer:
 
             def do_POST(self):
                 n = int(self.headers.get("Content-Length", 0))
-                body = json.loads(self.rfile.read(n))
+                raw = self.rfile.read(n)
+                if self.path.endswith("/audio/transcriptions"):
+                    outer.requests.append({"_multipart": raw, "_ctype": self.headers.get("Content-Type", "")})
+                    self._json({"text": "hello from whisper"})
+                    return
+                body = json.loads(raw)
                 outer.requests.append(body)
                 r = outer.responder(body)
                 tcs = [{"id": "call_%d" % i, "type": "function",

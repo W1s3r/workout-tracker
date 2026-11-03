@@ -123,6 +123,59 @@ Spy is told that master rules apply everywhere and that project files add specif
 file winning on project matters. Each project also has its own saved sessions (`spy -c` continues *this*
 project's last conversation) and its own input history.
 
+### Images and screenshots
+
+Inkling-Small can see images. To give Spy one:
+
+| How | |
+|---|---|
+| **Alt+V** in the input box (or Ctrl+V if your terminal passes it through) | attaches the image on the clipboard as `[Image #1]`. Take a screenshot with **Win+Shift+S**, then press Alt+V. |
+| `/paste` | the same, as a command (also works in the plain prompt) |
+| `@shot.png` | attaches an image file (Tab completes the path) |
+| drag a file into the terminal | the pasted path (`"C:\...\shot.png"`) is detected and attached |
+| ask Spy to look at a file | `read_file` on a `.png/.jpg/.gif/.webp/.bmp` *shows* it the image (charts, diagrams, UI screenshots) |
+
+Why Alt+V: Windows terminals take Ctrl+V for themselves and only paste text, so Spy reads the clipboard
+directly. It uses Windows' clipboard functions through `ctypes`, or Pillow when present. Copying an image
+*file* in Explorer works too.
+
+- Pasted images are saved in `~/.spy/images/`. Large ones are downscaled to 1568 px when Pillow is
+  available.
+- Only the 4 most recent images are re-sent with each request (`images.keep_last`), to save context.
+- Models marked `"vision": false` (GPT-OSS) get a note instead of the image. `spy doctor` checks image input
+  with a test picture.
+
+### Voice input (`/voice`)
+
+| Command | |
+|---|---|
+| `/voice` | record now; press **Enter** to stop (Ctrl+C cancels) |
+| `/voice on` | voice mode: pressing **Enter on an empty box** starts recording. `/voice off` to stop. |
+| `/voice test`, `spy voicetest` | record and print the transcript only |
+
+The transcript is put **into the input box** for you to check and edit before pressing Enter.
+
+**Recording** needs no installs on Windows: Spy uses the recorder built into Windows (`winmm.dll`, via
+`ctypes`) and records 16 kHz mono WAV. On Linux or macOS it uses `arecord`, `sox` or `ffmpeg`.
+`voice.record_command` can override this. If nothing is recorded, check *Settings → Privacy → Microphone →
+Let desktop apps access your microphone*.
+
+**Transcription** (`voice.engine`):
+
+- `"llm"` (default): the audio is sent to the model and it writes the transcript. Inkling-Small accepts audio
+  input, so nothing else is needed. `spy doctor` tests whether your server accepts audio, and in which form
+  (`audio_part`).
+- `"transcriptions"`: an OpenAI-style `/v1/audio/transcriptions` endpoint, such as Whisper.
+  **Spyglass's transcription is very likely one of these.** To find its address:
+  1. In Spyglass, press F12 and open the Network tab.
+  2. Use the microphone once.
+  3. Note the URL of the request that uploads the audio.
+  4. Put that URL in `voice.url`, and the model name in `voice.model`.
+
+  If Spyglass needs your login for it, the request also needs the same headers or cookie
+  (`voice.headers`, `voice.cookie`).
+- `"command"`: any script that prints the transcript (`"python my_stt.py {wav}"`).
+
 ### Editing safety
 
 `edit_file` replaces one exact, unique piece of text and leaves the rest of the file byte-for-byte unchanged.
@@ -285,6 +338,8 @@ Inside the session:
 | `/reflect` | agent reviews the session and saves lessons to memory |
 | `/plan`, `/mode auto` | permission modes |
 | `/undo`, `/changes` | revert / list file changes Spy made |
+| Alt+V, `/paste`, `@shot.png` | attach a screenshot / image |
+| `/voice`, `/voice on` | speak instead of typing |
 | `/style …` | response style, language, format |
 | `/last` | why the last turn ended, how many auto-continues |
 | `/web <url>` | test internal-web access for a URL |

@@ -22,6 +22,7 @@ class ToolContext:
     bg_jobs: Dict[str, Any] = field(default_factory=dict)
     agent: Any = None                # the owning Agent (for sub-agents)
     history: Any = None              # edit_safety.FileHistory - backups for /undo
+    pending_images: List[str] = field(default_factory=list)  # images a tool wants the model to see
     depth: int = 0                   # sub-agent nesting depth
 
     def __post_init__(self):
