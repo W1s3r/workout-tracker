@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.spy/config.local.json
+.spy/SPY.local.md
+research/
